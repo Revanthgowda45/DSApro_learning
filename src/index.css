@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Base styles */
+body {
+  @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+}
+
+/* Custom component styles */
+.card {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm;
+}
+
+.card-hover {
+  @apply hover:shadow-md dark:hover:shadow-lg transition-shadow duration-200;
+}
+
+.input {
+  @apply bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400;
+}
+
+.input:focus {
+  @apply ring-2 ring-green-500 dark:ring-green-400 border-green-500 dark:border-green-400;
+}
+
+.btn-primary {
+  @apply bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100;
+}
+
+.text-primary {
+  @apply text-green-600 dark:text-green-400;
+}
+
+.text-secondary {
+  @apply text-gray-600 dark:text-gray-400;
+}
+
+.border-primary {
+  @apply border-green-600 dark:border-green-400;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply border-gray-300 dark:border-gray-600;
+}
+
+.spinner-primary {
+  @apply border-t-green-600 dark:border-t-green-400;
+}
+
+/* Navigation styles */
+.nav-item {
+  @apply text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400;
+}
+
+.nav-item-active {
+  @apply text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20;
+}
+
+/* Stats card styles */
+.stats-card {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700;
+}
+
+/* Progress bar styles */
+.progress-bar {
+  @apply bg-gray-200 dark:bg-gray-700;
+}
+
+.progress-fill {
+  @apply bg-green-600 dark:bg-green-500;
+}
+
+/* Badge styles */
+.badge-success {
+  @apply bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300;
+}
+
+.badge-warning {
+  @apply bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300;
+}
+
+.badge-error {
+  @apply bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300;
+}
+
+.badge-info {
+  @apply bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300;
+}
+
+/* Calendar styles */
+.calendar-day {
+  @apply bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700;
+}
+
+.calendar-day-active {
+  @apply bg-green-500 dark:bg-green-600 text-white;
+}
+
+/* Modal and overlay styles */
+.modal-overlay {
+  @apply bg-black/50 dark:bg-black/70;
+}
+
+.modal-content {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700;
+}
+
+/* Tooltip styles */
+.tooltip {
+  @apply bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900;
+}
+
+/* Animation classes */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
