@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, Calendar, TrendingUp } from 'lucide-react';
+import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, Calendar, TrendingUp, Camera } from 'lucide-react';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
 import { PerformanceMonitor } from '../utils/performanceMonitor';
 import EnhancedCalendar from '../components/profile/EnhancedCalendar';
+import AvatarUpload from '../components/ui/AvatarUpload';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
   const { metrics } = useOptimizedAnalytics();
   const [isEditing, setIsEditing] = useState(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   // Performance monitoring
@@ -113,25 +115,35 @@ export default function Profile() {
         {/* User Header Card */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-700 dark:to-purple-700 rounded-2xl shadow-lg p-8 mb-8 text-white">
           <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6">
-            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
-              {user?.avatar_url ? (
-                <img 
-                  src={user.avatar_url} 
-                  alt={user?.full_name || user?.username || 'User'}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // Fallback to User icon if image fails to load
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    const parent = target.parentElement;
-                    if (parent) {
-                      parent.innerHTML = '<svg class="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>';
-                    }
-                  }}
-                />
-              ) : (
-                <User className="h-10 w-10 text-white" />
-              )}
+            <div className="relative">
+              <div className="w-28 h-28 bg-white/20 rounded-full flex items-center justify-center overflow-hidden border-4 border-white/30 shadow-lg">
+                {user?.avatar_url ? (
+                  <img 
+                    src={user.avatar_url} 
+                    alt={user?.full_name || user?.username || 'User'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to User icon if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<svg class="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>';
+                      }
+                    }}
+                  />
+                ) : (
+                  <User className="h-10 w-10 text-white" />
+                )}
+              </div>
+              {/* Edit Avatar Button - Always Visible */}
+              <button
+                onClick={() => setShowAvatarUpload(true)}
+                className="absolute -bottom-1 -right-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-2 shadow-lg transition-all duration-200"
+                title="Edit Profile Picture"
+              >
+                <Camera className="h-3 w-3" />
+              </button>
             </div>
             <div className="text-center md:text-left flex-1">
               <h2 className="text-2xl font-bold mb-2">{user?.full_name || user?.username || 'User'}</h2>
@@ -396,6 +408,45 @@ export default function Profile() {
               <XCircle className="h-5 w-5" />
             )}
             <span className="text-sm font-medium">{notification.message}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Avatar Upload Modal */}
+      {showAvatarUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                Update Profile Picture
+              </h3>
+              <button
+                onClick={() => setShowAvatarUpload(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <AvatarUpload
+                currentAvatarUrl={user?.avatar_url}
+                onAvatarUpdate={() => {
+                  showNotification('Profile picture updated successfully!', 'success');
+                  setShowAvatarUpload(false);
+                }}
+                size="large"
+              />
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowAvatarUpload(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

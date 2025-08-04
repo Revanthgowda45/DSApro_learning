@@ -29,7 +29,10 @@ export default function UserProfileDropdown() {
       
       // Also log to alert for visibility
       if (user.avatar_url) {
-        console.log('✅ AVATAR URL FOUND:', user.avatar_url);
+        const isBase64 = user.avatar_url.startsWith('data:');
+        const avatarType = isBase64 ? 'base64 data URL' : 'regular URL';
+        const displayUrl = isBase64 ? `${user.avatar_url.substring(0, 50)}...` : user.avatar_url;
+        console.log(`✅ AVATAR URL FOUND (${avatarType}):`, displayUrl);
       } else {
         console.log('❌ NO AVATAR URL - user.avatar_url is:', user.avatar_url);
       }
@@ -72,7 +75,7 @@ export default function UserProfileDropdown() {
         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400"
       >
         {/* Avatar */}
-        <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border-2 border-gray-300 dark:border-gray-600 shadow-sm">
           {user?.avatar_url ? (
             <img 
               src={user.avatar_url} 
@@ -122,7 +125,7 @@ export default function UserProfileDropdown() {
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-3">
               {/* Large Avatar */}
-              <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden border-2 border-gray-300 dark:border-gray-600 shadow-sm">
                 {user?.avatar_url ? (
                   <img 
                     src={user.avatar_url} 
