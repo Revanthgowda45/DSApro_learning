@@ -18,7 +18,8 @@ import {
   Lightbulb,
   Mail,
   Github,
-  Linkedin
+  Linkedin,
+  Globe
 } from 'lucide-react';
 
 export default function About() {
@@ -511,6 +512,18 @@ export default function About() {
                       <Linkedin className="w-4 h-4" />
                     </div>
                     <span className="text-sm">LinkedIn Profile</span>
+                  </a>
+                  <a
+                    href="https://revanthcode.netlify.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-gray-300 hover:text-green-400 transition-colors duration-200 group"
+                    title="Portfolio Website"
+                  >
+                    <div className="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center mr-3 group-hover:bg-green-600 transition-colors duration-200">
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <span className="text-sm">Portfolio Website</span>
                   </a>
                 </div>
               </div>
