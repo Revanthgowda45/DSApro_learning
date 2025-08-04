@@ -16,7 +16,6 @@ port = 5173.0
 publish = "C:\\Users\\HP\\Desktop\\PROJECT-2\\DSAproject\\dist"
 publishOrigin = "config"
 commandOrigin = "config"
-base = "C:\\Users\\HP\\Desktop\\PROJECT-2\\DSAproject"
 command = "npm run build"
 functions = "C:\\Users\\HP\\Desktop\\PROJECT-2\\DSAproject\\netlify\\functions"
 

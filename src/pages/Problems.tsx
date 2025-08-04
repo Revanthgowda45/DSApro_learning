@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, Loader2 } from 'lucide-react';
+import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { transformDSAQuestions, getTopics, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
@@ -8,8 +8,8 @@ import { PerformanceMonitor } from '../utils/performanceMonitor';
 // Problem interface is now imported from dsaDatabase
 
 // Virtualization constants
-const ITEMS_PER_PAGE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
 
 export default function Problems() {
   // Use optimized analytics for better performance
@@ -65,10 +65,15 @@ export default function Problems() {
   const [selectedBookmark, setSelectedBookmark] = useState('All');
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [sortBy, setSortBy] = useState('default');
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [scrollButtonState, setScrollButtonState] = useState<'hidden' | 'down' | 'up'>('hidden');
+  const [isScrolling, setIsScrolling] = useState(false);
   
   // Refs for performance optimization
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const scrollTimeoutRef = useRef<NodeJS.Timeout>();
   const containerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   
   // Lazy load problems on component mount
   useEffect(() => {
@@ -175,12 +180,12 @@ export default function Problems() {
   
   // Paginated problems for virtualization
   const paginatedProblems = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
     return filteredProblems.slice(startIndex, endIndex);
-  }, [filteredProblems, currentPage]);
+  }, [filteredProblems, currentPage, itemsPerPage]);
   
-  const totalPages = Math.ceil(filteredProblems.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredProblems.length / itemsPerPage);
   const hasNextPage = currentPage < totalPages;
   const hasPrevPage = currentPage > 1;
 
@@ -232,6 +237,7 @@ export default function Problems() {
     setSelectedCompany('All');
     setSelectedBookmark('All');
     setSortBy('default');
+    setItemsPerPage(20);
     setCurrentPage(1);
     
     timer();
@@ -277,6 +283,67 @@ export default function Problems() {
     PerformanceMonitor.recordMetric('problems_total', problems.length);
     PerformanceMonitor.recordMetric('problems_filtered', filteredProblems.length);
   }, [problems.length, filteredProblems.length]);
+
+  // Scroll event listener for showing/hiding scroll button
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+      
+      // Set scrolling state to true when user starts scrolling
+      setIsScrolling(true);
+      
+      // Determine button direction (mobile-optimized thresholds)
+      const isAtTop = scrollTop < 50; // Smaller threshold for mobile
+      const isNearBottom = scrollTop + windowHeight >= documentHeight - 100; // Smaller threshold for mobile
+      
+      if (isAtTop) {
+        setScrollButtonState('down'); // Show down arrow to scroll to bottom
+      } else if (isNearBottom) {
+        setScrollButtonState('up'); // Show up arrow to scroll to top
+      } else {
+        setScrollButtonState('down'); // Show down arrow to scroll to bottom when in middle
+      }
+      
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // Set timeout to hide button when scrolling stops (shorter for mobile)
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 1000); // Hide button 1 second after scrolling stops
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Call once to set initial state
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Scroll function that handles both directions
+  const handleScrollButtonClick = useCallback(() => {
+    if (scrollButtonState === 'down') {
+      // Scroll to bottom
+      bottomRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'end' 
+      });
+    } else if (scrollButtonState === 'up') {
+      // Scroll to top
+      containerRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  }, [scrollButtonState]);
 
   // Removed unused functions - now handled by ProblemCard component
 
@@ -342,72 +409,106 @@ export default function Problems() {
           />
         </div>
         
-        {/* Mobile-First Filter Grid */}
+        {/* Mobile-First Filter Grid with Labels */}
         <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           {/* Difficulty Filter */}
-          <select
-            value={selectedDifficulty}
-            onChange={(e) => handleFilterChange(setSelectedDifficulty)(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          >
-            {difficulties.map(difficulty => (
-              <option key={difficulty} value={difficulty}>{difficulty}</option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Difficulty
+            </label>
+            <select
+              value={selectedDifficulty}
+              onChange={(e) => handleFilterChange(setSelectedDifficulty)(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
+            >
+              {difficulties.map(difficulty => (
+                <option key={difficulty} value={difficulty}>
+                  {difficulty === 'All' ? 'All Difficulties' : difficulty}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Category Filter */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => handleFilterChange(setSelectedCategory)(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          >
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Category
+            </label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => handleFilterChange(setSelectedCategory)(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
+            >
+              {categories.map(category => (
+                <option key={category} value={category}>
+                  {category === 'All' ? 'All Categories' : category}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => handleFilterChange(setSelectedStatus)(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          >
-            {statuses.map(status => (
-              <option key={status} value={status}>
-                {status === 'All' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Status
+            </label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => handleFilterChange(setSelectedStatus)(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
+            >
+              {statuses.map(status => (
+                <option key={status} value={status}>
+                  {status === 'All' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Bookmark Filter */}
-          <select
-            value={selectedBookmark}
-            onChange={(e) => handleFilterChange(setSelectedBookmark)(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          >
-            {bookmarkOptions.map(option => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Bookmarks
+            </label>
+            <select
+              value={selectedBookmark}
+              onChange={(e) => handleFilterChange(setSelectedBookmark)(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
+            >
+              {bookmarkOptions.map(option => (
+                <option key={option} value={option}>
+                  {option === 'All' ? 'All Bookmarks' : option}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Sort By */}
-          <select
-            value={sortBy}
-            onChange={(e) => handleFilterChange(setSortBy)(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          >
-            {sortOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Sort By
+            </label>
+            <select
+              value={sortBy}
+              onChange={(e) => handleFilterChange(setSortBy)(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
+            >
+              {sortOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         
         {/* Company Filter - Full Width on Mobile */}
-        <div className="mt-3 sm:mt-4">
+        <div className="mt-3 sm:mt-4 space-y-1">
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+            Company
+          </label>
           <select
             value={selectedCompany}
             onChange={(e) => handleFilterChange(setSelectedCompany)(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
+            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
           >
             {companies.slice(0, 20).map(company => (
               <option key={company} value={company}>
@@ -445,17 +546,40 @@ export default function Problems() {
         </div>
       </div>
 
-      {/* Results Summary */}
+      {/* Results Summary with Page Size Selector */}
       {filteredProblems.length > 0 && (
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProblems.length)} of {filteredProblems.length} problems
+            Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredProblems.length)} of {filteredProblems.length} problems
           </p>
-          {totalPages > 1 && (
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Page {currentPage} of {totalPages}
+          <div className="flex flex-col xs:flex-row items-start xs:items-center space-y-2 xs:space-y-0 xs:space-x-4">
+            {/* Page Size Selector */}
+            <div className="flex items-center space-x-2">
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                Show:
+              </label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent touch-manipulation min-h-[32px]"
+              >
+                {PAGE_SIZE_OPTIONS.map(size => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">per page</span>
             </div>
-          )}
+            {totalPages > 1 && (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Page {currentPage} of {totalPages}
+              </div>
+            )}
+          </div>
         </div>
       )}
       
@@ -479,7 +603,7 @@ export default function Problems() {
             <button
               onClick={handlePrevPage}
               disabled={!hasPrevPage}
-              className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+              className="px-3 py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600 touch-manipulation min-h-[40px]"
             >
               Previous
             </button>
@@ -502,10 +626,10 @@ export default function Problems() {
                   <button
                     key={pageNum}
                     onClick={() => handlePageJump(pageNum)}
-                    className={`px-3 py-2 text-sm font-medium rounded-md ${
+                    className={`px-3 py-2.5 text-sm font-medium rounded-md touch-manipulation min-h-[40px] min-w-[40px] ${
                       currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'
+                        ? 'bg-blue-600 text-white active:bg-blue-700'
+                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600'
                     }`}
                   >
                     {pageNum}
@@ -517,7 +641,7 @@ export default function Problems() {
             <button
               onClick={handleNextPage}
               disabled={!hasNextPage}
-              className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+              className="px-3 py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600 touch-manipulation min-h-[40px]"
             >
               Next
             </button>
@@ -537,7 +661,7 @@ export default function Problems() {
                   handlePageJump(page);
                 }
               }}
-              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+              className="w-16 px-2 py-2 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation min-h-[40px]"
             />
           </div>
         </div>
@@ -550,6 +674,24 @@ export default function Problems() {
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No problems found</h3>
           <p className="text-gray-600 dark:text-gray-400">Try adjusting your filters to see more problems.</p>
         </div>
+      )}
+      
+      {/* Bottom reference for scroll to bottom */}
+      <div ref={bottomRef} className="h-1" />
+      
+      {/* Scroll Button - Mobile Optimized */}
+      {scrollButtonState !== 'hidden' && isScrolling && (
+        <button
+          onClick={handleScrollButtonClick}
+          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-50 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2.5 sm:p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 animate-in fade-in-0 slide-in-from-bottom-2 touch-manipulation"
+          aria-label={scrollButtonState === 'down' ? 'Scroll to bottom' : 'Scroll to top'}
+        >
+          {scrollButtonState === 'down' ? (
+            <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6" />
+          ) : (
+            <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6" />
+          )}
+        </button>
       )}
     </div>
   );

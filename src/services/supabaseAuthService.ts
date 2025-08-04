@@ -397,4 +397,151 @@ export class SupabaseAuthService {
       throw error
     }
   }
+
+  // Google OAuth Login
+  static async signInWithGoogle(): Promise<{ user: User | null; session: any }> {
+    try {
+      this.checkSupabaseAvailable();
+      
+      console.log('🔄 Attempting Google OAuth login...');
+      
+      const { data, error } = await supabase!.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      
+      if (error) {
+        console.error('❌ Google OAuth error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Google OAuth initiated successfully');
+      
+      // The actual user data will be available after redirect
+      return { user: null, session: null };
+    } catch (error: any) {
+      console.error('❌ Google OAuth failed:', error);
+      throw new Error(error.message || 'Google login failed. Please try again.');
+    }
+  }
+
+  // Handle OAuth callback and create profile
+  static async handleOAuthCallback(): Promise<{ user: User; session: any } | null> {
+    try {
+      this.checkSupabaseAvailable();
+      
+      console.log('🔄 Handling OAuth callback...');
+      
+      const { data: { session }, error: sessionError } = await supabase!.auth.getSession();
+      
+      if (sessionError) {
+        console.error('❌ Session error:', sessionError);
+        throw sessionError;
+      }
+      
+      if (!session || !session.user) {
+        console.log('📱 No active session found');
+        return null;
+      }
+      
+      console.log('✅ OAuth session found:', session.user.email);
+      
+      // Check if profile exists
+      const { data: existingProfile, error: profileError } = await supabase!
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('❌ Profile lookup error:', profileError);
+        throw profileError;
+      }
+      
+      let profile;
+      
+      if (!existingProfile) {
+        // Create new profile for OAuth user
+        console.log('🔄 Creating new profile for OAuth user');
+        
+        const profileData: ProfileInsert = {
+          id: session.user.id,
+          username: session.user.user_metadata?.preferred_username || 
+                   session.user.user_metadata?.name?.toLowerCase().replace(/\s+/g, '_') || 
+                   session.user.email?.split('@')[0] || null,
+          full_name: session.user.user_metadata?.full_name || 
+                    session.user.user_metadata?.name || null,
+          avatar_url: session.user.user_metadata?.avatar_url || 
+                     session.user.user_metadata?.picture || null,
+          learning_pace: 'moderate',
+          daily_time_limit: 120,
+          difficulty_preferences: ['Easy', 'Medium'],
+          adaptive_difficulty: true
+        };
+        
+        const { data: newProfile, error: insertError } = await supabase!
+          .from('profiles')
+          .insert(profileData)
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('❌ Profile creation error:', insertError);
+          throw insertError;
+        }
+        
+        profile = newProfile;
+        console.log('✅ Profile created successfully');
+      } else {
+        profile = existingProfile;
+        console.log('✅ Existing profile found');
+      }
+      
+      const user: User = {
+        id: profile.id,
+        username: profile.username,
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url,
+        learning_pace: profile.learning_pace,
+        daily_time_limit: profile.daily_time_limit,
+        difficulty_preferences: profile.difficulty_preferences,
+        adaptive_difficulty: profile.adaptive_difficulty,
+        email: session.user.email || undefined,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at
+      };
+      
+      return { user, session };
+    } catch (error: any) {
+      console.error('❌ OAuth callback handling failed:', error);
+      throw new Error(error.message || 'OAuth authentication failed. Please try again.');
+    }
+  }
+
+  // Sign out (works for both email and OAuth)
+  static async signOut(): Promise<void> {
+    try {
+      this.checkSupabaseAvailable();
+      
+      console.log('🔄 Signing out...');
+      
+      const { error } = await supabase!.auth.signOut();
+      
+      if (error) {
+        console.error('❌ Sign out error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Signed out successfully');
+    } catch (error: any) {
+      console.error('❌ Sign out failed:', error);
+      throw new Error(error.message || 'Sign out failed. Please try again.');
+    }
+  }
 }

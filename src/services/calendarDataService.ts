@@ -298,9 +298,9 @@ export class CalendarDataService {
       
       return {
         ...day,
-        hasPracticed: session ? session.problems_solved > 0 : dayProblems.length > 0,
-        problemCount: session ? session.problems_solved : dayProblems.length,
-        timeSpent: session ? session.time_spent : solvedProblems.reduce((sum, p) => sum + p.timeSpent, 0),
+        hasPracticed: dayProblems.length > 0 || (session ? session.problems_solved > 0 : false),
+        problemCount: dayProblems.length, // Always use actual problem progress count
+        timeSpent: solvedProblems.reduce((sum, p) => sum + p.timeSpent, 0) || (session ? session.time_spent : 0),
         solvedProblems,
         sessionData: session ? {
           id: session.id,
@@ -362,9 +362,9 @@ export class CalendarDataService {
       
       return {
         ...day,
-        hasPracticed: session ? session.problemCount > 0 : dayProblems.length > 0,
-        problemCount: session ? session.problemCount : dayProblems.length,
-        timeSpent: session ? session.timeSpent : solvedProblems.reduce((sum, p) => sum + p.timeSpent, 0),
+        hasPracticed: dayProblems.length > 0 || (session ? session.problemCount > 0 : false),
+        problemCount: dayProblems.length, // Always use actual problem progress count
+        timeSpent: solvedProblems.reduce((sum, p) => sum + p.timeSpent, 0) || (session ? session.timeSpent : 0),
         solvedProblems
       }
     })

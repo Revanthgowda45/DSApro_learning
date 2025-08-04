@@ -4,9 +4,7 @@ import {
   User, 
   Settings, 
   LogOut, 
-  ChevronDown,
-  Trophy,
-  Target
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -14,6 +12,29 @@ export default function UserProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
+  
+  // Debug logging to check user data
+  useEffect(() => {
+    if (user) {
+      console.log('🔍 UserProfileDropdown - User data:', {
+        id: user.id,
+        full_name: user.full_name,
+        username: user.username,
+        email: user.email,
+        avatar_url: user.avatar_url,
+        avatar_url_type: typeof user.avatar_url,
+        avatar_url_length: user.avatar_url?.length,
+        has_avatar: !!user.avatar_url
+      });
+      
+      // Also log to alert for visibility
+      if (user.avatar_url) {
+        console.log('✅ AVATAR URL FOUND:', user.avatar_url);
+      } else {
+        console.log('❌ NO AVATAR URL - user.avatar_url is:', user.avatar_url);
+      }
+    }
+  }, [user]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -51,8 +72,29 @@ export default function UserProfileDropdown() {
         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400"
       >
         {/* Avatar */}
-        <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-          {getInitials(user?.full_name || user?.username || 'U')}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden">
+          {user?.avatar_url ? (
+            <img 
+              src={user.avatar_url} 
+              alt={user?.full_name || user?.username || 'User'}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback to initials if image fails to load
+                const target = e.target as HTMLImageElement;
+                console.log('🚨 Avatar image failed to load:', target.src);
+                console.log('🚨 Error details:', e);
+                target.style.display = 'none';
+                const parent = target.parentElement;
+                if (parent) {
+                  parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">${getInitials(user?.full_name || user?.username || 'U')}</div>`;
+                }
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+              {getInitials(user?.full_name || user?.username || 'U')}
+            </div>
+          )}
         </div>
         
         {/* User Info - Hidden on mobile */}
@@ -80,8 +122,27 @@ export default function UserProfileDropdown() {
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-3">
               {/* Large Avatar */}
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-lg font-semibold">
-                {getInitials(user?.full_name || user?.username || 'U')}
+              <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden">
+                {user?.avatar_url ? (
+                  <img 
+                    src={user.avatar_url} 
+                    alt={user?.full_name || user?.username || 'User'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to initials if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-lg font-semibold">${getInitials(user?.full_name || user?.username || 'U')}</div>`;
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white text-lg font-semibold">
+                    {getInitials(user?.full_name || user?.username || 'U')}
+                  </div>
+                )}
               </div>
               
               <div className="flex-1 min-w-0">

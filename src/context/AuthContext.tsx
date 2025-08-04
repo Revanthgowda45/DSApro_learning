@@ -15,6 +15,8 @@ interface AuthContextType {
   register: (userData: any) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  handleOAuthCallback: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -84,6 +86,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       try {
         console.log('🔄 Getting Supabase session...');
+        
+        // Check if this is an OAuth callback (URL contains access_token or code)
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const hasOAuthParams = urlParams.has('code') || hashParams.has('access_token') || 
+                              urlParams.has('access_token') || hashParams.has('code');
+        
+        if (hasOAuthParams) {
+          console.log('🔄 OAuth callback detected, handling...');
+          try {
+            const result = await SupabaseAuthService.handleOAuthCallback();
+            if (result && isMounted) {
+              console.log('✅ OAuth callback successful:', result.user.email);
+              setUser(result.user);
+              storeUserData(result.user);
+              setCookie('auth_session', JSON.stringify(result.session), 7);
+              
+              // Clean up URL
+              window.history.replaceState({}, document.title, window.location.pathname);
+              
+              setLoading(false);
+              setInitialAuthComplete(true);
+              return;
+            }
+          } catch (oauthError) {
+            console.error('❌ OAuth callback failed:', oauthError);
+            // Continue with regular session check
+          }
+        }
+        
         const currentUser = await SupabaseAuthService.getCurrentUser();
         
         if (currentUser && isMounted) {
@@ -296,13 +328,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Try to update in Supabase if available
       try {
-        await SupabaseAuthService.updateUser(updatedUser);
-        console.log('✅ User updated in Supabase');
+        // Note: updateUser method needs to be implemented in SupabaseAuthService
+        console.log('✅ User updated locally');
       } catch (error) {
         console.warn('⚠️ Failed to update user in Supabase, using local only:', error);
       }
     } catch (error) {
       console.error('❌ User update failed:', error);
+      throw error;
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      console.log('🔄 AuthContext: Starting Google OAuth login...');
+      await SupabaseAuthService.signInWithGoogle();
+      // The redirect will happen automatically
+    } catch (error) {
+      console.error('❌ AuthContext: Google login failed:', error);
+      throw error;
+    }
+  };
+
+  const handleOAuthCallback = async () => {
+    try {
+      console.log('🔄 AuthContext: Handling OAuth callback...');
+      const result = await SupabaseAuthService.handleOAuthCallback();
+      
+      if (result) {
+        console.log('✅ OAuth callback successful:', result.user.email);
+        setUser(result.user);
+        storeUserData(result.user);
+        
+        // Store session data
+        setCookie('auth_session', JSON.stringify(result.session), 7);
+        
+        // Sync data in background
+        try {
+          await SimpleDataSync.syncUserData(result.user.id);
+        } catch (syncError) {
+          console.warn('⚠️ Data sync failed:', syncError);
+        }
+      } else {
+        console.log('📱 No OAuth session found');
+      }
+    } catch (error) {
+      console.error('❌ AuthContext: OAuth callback failed:', error);
       throw error;
     }
   };
@@ -314,7 +385,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     register,
     logout,
-    updateUser
+    updateUser,
+    signInWithGoogle,
+    handleOAuthCallback
   };
 
   return (
