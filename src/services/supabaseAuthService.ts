@@ -223,6 +223,57 @@ export class SupabaseAuthService {
     if (error) throw error
   }
 
+  // Update user profile
+  static async updateUser(userData: Partial<User>): Promise<User> {
+    try {
+      this.checkSupabaseAvailable();
+      
+      const session = await this.getCurrentSession();
+      if (!session?.user) {
+        throw new Error('No authenticated user');
+      }
+
+      // Update profile in profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: userData.full_name,
+          username: userData.username,
+          learning_pace: userData.learning_pace,
+          daily_time_limit: userData.daily_time_limit,
+          difficulty_preferences: userData.difficulty_preferences,
+          adaptive_difficulty: userData.adaptive_difficulty,
+          avatar_url: userData.avatar_url,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.user.id)
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        throw profileError;
+      }
+
+      // If email is being updated, update auth user as well
+      if (userData.email && userData.email !== session.user.email) {
+        await this.updateEmail(userData.email);
+      }
+
+      // Get the updated user data
+      const updatedUser = await this.getCurrentUser();
+      if (!updatedUser) {
+        throw new Error('Failed to retrieve updated user data');
+      }
+
+      console.log('✅ User profile updated successfully in Supabase');
+      return updatedUser;
+    } catch (error) {
+      console.error('❌ Failed to update user profile:', error);
+      throw error;
+    }
+  }
+
   // Reset password
   static async resetPassword(email: string): Promise<void> {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {

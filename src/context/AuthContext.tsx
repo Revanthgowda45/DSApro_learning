@@ -322,16 +322,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     try {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      storeUserData(updatedUser);
+      // First update locally for immediate UI feedback
+      const localUpdatedUser = { ...user, ...userData };
+      setUser(localUpdatedUser);
+      storeUserData(localUpdatedUser);
       
       // Try to update in Supabase if available
       try {
-        // Note: updateUser method needs to be implemented in SupabaseAuthService
-        console.log('✅ User updated locally');
+        const updatedUser = await SupabaseAuthService.updateUser(userData);
+        // Update with the data returned from Supabase
+        setUser(updatedUser);
+        storeUserData(updatedUser);
+        console.log('✅ User updated successfully in Supabase');
       } catch (error) {
-        console.warn('⚠️ Failed to update user in Supabase, using local only:', error);
+        console.warn('⚠️ Failed to update user in Supabase, keeping local changes:', error);
+        // Keep the local changes even if Supabase update fails
       }
     } catch (error) {
       console.error('❌ User update failed:', error);
@@ -365,7 +370,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Sync data in background
         try {
-          await SimpleDataSync.syncUserData(result.user.id);
+          await SimpleDataSync.syncOnLogin(result.user.id);
         } catch (syncError) {
           console.warn('⚠️ Data sync failed:', syncError);
         }
