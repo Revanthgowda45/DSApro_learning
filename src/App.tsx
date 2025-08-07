@@ -14,12 +14,12 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import About from './pages/About';
-import AuthTest from './pages/AuthTest';
+
 import Admin from './pages/Admin';
 import Stopwatch from './pages/Stopwatch';
 import './utils/progressReset'; // Import for console access
 import './utils/resetAnalytics'; // Import reset analytics utility
-import './tests/supabaseIntegrationTest'; // Make test available globally
+
 import './utils/adminConsole'; // Import admin console utilities
 
 // Initialize production optimizations first
@@ -137,7 +137,7 @@ function AppContent() {
             </ProtectedRoute>
           } />
           <Route path="/about" element={<About />} />
-          <Route path="/auth-test" element={<AuthTest />} />
+          
           <Route path="/" element={
             user ? <Navigate to="/dashboard" replace /> : <Navigate to="/about" replace />
           } />
