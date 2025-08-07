@@ -13,6 +13,8 @@ import {
   Settings,
   User,
   LogOut,
+  Crown,
+  Timer,
   Info
 } from 'lucide-react';
 
@@ -26,12 +28,13 @@ export default function Navbar() {
     { path: '/dashboard', icon: Home, label: 'Dashboard', description: 'Your learning overview' },
     { path: '/problems', icon: BookOpen, label: 'Problems', description: '375+ DSA problems' },
     { path: '/progress', icon: TrendingUp, label: 'Progress', description: 'Track your journey' },
-    { path: '/profile', icon: User, label: 'Profile', description: 'Your account settings' },
-    { path: '/about', icon: Info, label: 'About', description: 'Learn more about DSA' }
+    { path: '/timer', icon: Timer, label: 'Timer', description: 'Track solving time' },
+    { path: '/profile', icon: User, label: 'Profile', description: 'Your account settings' }
   ];
 
   const quickActions = [
-    { path: '/settings', icon: Settings, label: 'Settings', color: 'text-gray-600 dark:text-gray-400' }
+    { path: '/settings', icon: Settings, label: 'Settings', color: 'text-gray-600 dark:text-gray-400' },
+    { path: '/about', icon: Info, label: 'About', color: 'text-gray-600 dark:text-gray-400' }
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -250,6 +253,17 @@ export default function Navbar() {
                   </Link>
                 ))}
                 
+                {/* Admin Panel - Only show for admin users in mobile menu */}
+                {user?.is_admin && (
+                  <Link
+                    to="/admin"
+                    className="flex items-center space-x-3 p-3 rounded-lg text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors"
+                  >
+                    <Crown className="h-5 w-5" />
+                    <span className="font-medium">Admin Panel</span>
+                  </Link>
+                )}
+                
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-3 p-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full text-left"
@@ -267,7 +281,7 @@ export default function Navbar() {
 
       {/* Bottom Tab Bar for Mobile (Alternative Navigation) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 z-30 safe-area-inset-bottom">
-        <div className="grid grid-cols-4 h-16 px-2">
+        <div className="grid grid-cols-5 h-16 px-2">
           {navItems.map(({ path, icon: Icon, label }) => (
             <Link
               key={path}

@@ -6,6 +6,7 @@ import { safeSetItem, cleanupLocalStorage, setCookie } from '../lib/storageUtils
 import { getCachedUserData, storeUserData, clearAuthPersistence } from '../lib/enhancedAuthPersistence';
 import { initProductionOptimizations } from '../utils/productionOptimizer';
 import { validateLocalCredentials, isValidEmail, validatePassword } from '../lib/authValidation';
+import { timeTrackingService } from '../services/timeTrackingService';
 
 interface AuthContextType {
   user: User | null;
@@ -17,6 +18,7 @@ interface AuthContextType {
   updateUser: (userData: Partial<User>) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   handleOAuthCallback: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,9 +40,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [initialAuthComplete, setInitialAuthComplete] = useState(false);
 
-  // Initialize production optimizations
+  // Initialize production optimizations and cleanup
   useEffect(() => {
     initProductionOptimizations();
+    // Clean up any orphaned timers on app start
+    timeTrackingService.cleanupOrphanedTimers();
   }, []);
 
   // Initialize authentication state - CityFix pattern
@@ -376,9 +380,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } else {
         console.log('📱 No OAuth session found');
-      }
+      } 
     } catch (error) {
       console.error('❌ AuthContext: OAuth callback failed:', error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      console.log(`🔄 AuthContext: Sending password reset email to ${email}...`);
+      await SupabaseAuthService.resetPassword(email);
+      console.log('✅ AuthContext: Password reset email sent successfully.');
+    } catch (error) {
+      console.error('❌ AuthContext: Password reset failed:', error);
       throw error;
     }
   };
@@ -392,7 +407,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     updateUser,
     signInWithGoogle,
-    handleOAuthCallback
+    handleOAuthCallback,
+    resetPassword
   };
 
   return (

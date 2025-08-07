@@ -100,6 +100,23 @@ export default function Dashboard() {
     }
   }, [refreshTrigger, user?.id, refresh]);
 
+  // Listen for learning preferences updates
+  useEffect(() => {
+    const handlePreferencesUpdate = (event: CustomEvent) => {
+      console.log('📊 Learning preferences updated, refreshing dashboard...');
+      // Force a re-render to show updated time limit
+      if (user?.id) {
+        loadRealAnalytics();
+      }
+    };
+
+    window.addEventListener('learningPreferencesUpdated', handlePreferencesUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('learningPreferencesUpdated', handlePreferencesUpdate as EventListener);
+    };
+  }, [user?.id]);
+
   // Show loading only if we have no data at all and are still loading
   const shouldShowLoading = loading && !progressMetrics && !quickStats;
   
@@ -190,11 +207,11 @@ export default function Dashboard() {
         />
         <StatsCard
           title="Time Today"
-          value={`${todayStats.timeSpent}/120min`}
+          value={`${todayStats.timeSpent}/${user?.daily_time_limit || 120}min`}
           icon={Clock}
           color="text-blue-600"
           bgColor="bg-blue-100"
-          trend={`${Math.round((todayStats.timeSpent / 120) * 100)}% of goal`}
+          trend={`${Math.round((todayStats.timeSpent / (user?.daily_time_limit || 120)) * 100)}% of goal`}
         />
         <StatsCard
           title="Confidence Level"

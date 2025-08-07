@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -10,30 +9,25 @@ import {
   Zap, 
   BookOpen, 
   CheckCircle, 
-  RefreshCw,
   X 
 } from 'lucide-react';
 import { useCalendarData } from '../../hooks/useCalendarData';
 import { useAuth } from '../../context/AuthContext';
-import type { CalendarDay, SolvedProblem } from '../../services/calendarDataService';
+import type { CalendarDay } from '../../services/calendarDataService';
 
 export default function EnhancedCalendar() {
   const { user } = useAuth();
   const {
     calendarDays,
     stats,
-    isLoading,
     error,
     currentDate,
-    setCurrentDate,
     refreshData,
     goToPreviousMonth,
     goToNextMonth,
     goToToday,
     selectDay,
-    selectedDay,
-    hasRealData,
-    dataSource
+    selectedDay
   } = useCalendarData({ period: 'month', autoRefresh: true });
 
   const monthNames = [
@@ -121,11 +115,10 @@ export default function EnhancedCalendar() {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleRefresh}
-            disabled={isLoading}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
             title="Refresh calendar data"
           >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <Calendar className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -375,15 +368,7 @@ export default function EnhancedCalendar() {
         </div>
       )}
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center rounded-lg">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
-            <span className="text-sm text-gray-600 dark:text-gray-400">Loading calendar data...</span>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

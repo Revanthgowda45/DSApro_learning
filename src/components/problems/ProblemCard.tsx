@@ -15,11 +15,16 @@ import {
   Trophy,
   Lightbulb,
   Timer,
-  BarChart3
+  BarChart3,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Problem } from '../../data/dsaDatabase';
 import { updateAllAnalytics } from '../../utils/analyticsUpdater';
-import { useSupabaseAuth } from '../../context/SupabaseAuthContext';
+import { useAuth } from '../../context/AuthContext';
+import { ProblemProgressService } from '../../services/problemProgressService';
+import Stopwatch from '../ui/Stopwatch';
+import { timeTrackingService, ProblemTimeStats } from '../../services/timeTrackingService';
 
 interface ProblemCardProps {
   problem: Problem;
@@ -34,11 +39,17 @@ export default function ProblemCard({
   onBookmarkToggle,
   showAIInsights = false 
 }: ProblemCardProps) {
+  const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [showNotes, setShowNotes] = useState(false);
   const [notes, setNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isLoadingRating, setIsLoadingRating] = useState(false);
+  const [showStopwatch, setShowStopwatch] = useState(false);
+  const [timeStats, setTimeStats] = useState<ProblemTimeStats | null>(null);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -82,9 +93,25 @@ export default function ProblemCard({
 
   const getPlatformInfo = (url: string) => {
     if (url?.includes('leetcode.com')) {
-      return { name: 'LeetCode', color: 'bg-orange-500 hover:bg-orange-600', icon: '🔥' };
+      return { 
+        name: 'LeetCode', 
+        color: 'bg-orange-500 hover:bg-orange-600', 
+        icon: (
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.104 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.938 5.938 0 0 0 1.271 1.818l4.277 4.193.039.038c2.248 2.165 5.852 2.133 8.063-.074l2.396-2.392c.54-.54.54-1.414.003-1.955a1.378 1.378 0 0 0-1.951-.003l-2.396 2.392a3.021 3.021 0 0 1-4.205.038l-.02-.019-4.276-4.193c-.652-.64-.972-1.469-.948-2.263a2.68 2.68 0 0 1 .066-.523 2.545 2.545 0 0 1 .619-1.164L9.13 8.114c1.058-1.134 3.204-1.27 4.43-.278l3.501 2.831c.593.48 1.461.387 1.94-.207a1.384 1.384 0 0 0-.207-1.943l-3.5-2.831c-.8-.647-1.766-1.045-2.774-1.202l2.015-2.158A1.384 1.384 0 0 0 13.483 0zm-2.866 12.815a1.38 1.38 0 0 0-1.38 1.382 1.38 1.38 0 0 0 1.38 1.382H20.79a1.38 1.38 0 0 0 1.38-1.382 1.38 1.38 0 0 0-1.38-1.382z"/>
+          </svg>
+        ) 
+      };
     } else if (url?.includes('geeksforgeeks.org')) {
-      return { name: 'GeeksforGeeks', color: 'bg-green-500 hover:bg-green-600', icon: '🚀' };
+      return { 
+        name: 'GeeksforGeeks', 
+        color: 'bg-green-500 hover:bg-green-600', 
+        icon: (
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21.45 14.315c-.143.28-.334.532-.565.745a3.691 3.691 0 0 1-1.104.565 4.677 4.677 0 0 1-1.425.213 4.677 4.677 0 0 1-1.425-.213 3.691 3.691 0 0 1-1.104-.565 2.795 2.795 0 0 1-.565-.745 2.054 2.054 0 0 1-.213-.96c0-.334.071-.645.213-.96.143-.28.334-.532.565-.745a3.691 3.691 0 0 1 1.104-.565A4.677 4.677 0 0 1 18.36 9.87c.497 0 .958.071 1.425.213.432.143.817.334 1.104.565.231.213.422.465.565.745.142.315.213.626.213.96 0 .334-.071.645-.213.96zm-9.87-4.8c-.143.28-.334.532-.565.745a3.691 3.691 0 0 1-1.104.565 4.677 4.677 0 0 1-1.425.213 4.677 4.677 0 0 1-1.425-.213 3.691 3.691 0 0 1-1.104-.565 2.795 2.795 0 0 1-.565-.745 2.054 2.054 0 0 1-.213-.96c0-.334.071-.645.213-.96.143-.28.334-.532.565-.745a3.691 3.691 0 0 1 1.104-.565A4.677 4.677 0 0 1 8.49 5.07c.497 0 .958.071 1.425.213.432.143.817.334 1.104.565.231.213.422.465.565.745.142.315.213.626.213.96 0 .334-.071.645-.213.96zM24 12c0 6.627-5.373 12-12 12S0 18.627 0 12 5.373 0 12 0s12 5.373 12 12zM8.49 10.8c.71 0 1.279-.569 1.279-1.28S9.2 8.24 8.49 8.24s-1.279.569-1.279 1.28.569 1.28 1.279 1.28zm9.87 4.8c.71 0 1.279-.569 1.279-1.28s-.569-1.28-1.279-1.28-1.279.569-1.279 1.28.569 1.28 1.279 1.28z"/>
+          </svg>
+        ) 
+      };
     } else if (url?.includes('hackerrank.com')) {
       return { name: 'HackerRank', color: 'bg-green-600 hover:bg-green-700', icon: '💻' };
     } else if (url?.includes('codechef.com')) {
@@ -162,52 +189,192 @@ export default function ProblemCard({
 
   const aiInsights = generateAIInsights(problem);
 
-  // Load saved notes and user data on component mount
+  // Load existing rating and notes when component mounts with optimized error handling
   useEffect(() => {
-    const savedData = localStorage.getItem(`problem_${problem.id}`);
-    if (savedData) {
-      try {
-        const data = JSON.parse(savedData);
-        setNotes(data.notes || '');
-        setUserRating(data.rating || 0);
-      } catch (error) {
-        console.error('Error loading saved problem data:', error);
-      }
-    }
-  }, [problem.id]);
+    if (!user?.id) return;
+    
+    // Debounce to reduce rapid API calls
+    const timeoutId = setTimeout(() => {
+      loadProblemData();
+      loadTimeStats();
+      checkTimerStatus();
+    }, 50);
+    
+    return () => clearTimeout(timeoutId);
+  }, [problem.id, user?.id]);
 
-  // Save notes to localStorage
-  const handleSaveNotes = async () => {
-    setIsSavingNotes(true);
+  const loadProblemData = async () => {
+    if (!user?.id) return;
     
     try {
-      const existingData = localStorage.getItem(`problem_${problem.id}`);
-      let data = {};
-      
-      if (existingData) {
-        data = JSON.parse(existingData);
+      const progress = await ProblemProgressService.getProblemProgress(user.id, problem.id);
+      if (progress) {
+        setUserRating(progress.rating || 0);
+        setNotes(progress.notes || '');
       }
+    } catch (error: any) {
+      // Handle 406 errors gracefully (table not set up)
+      if (error?.code === 'PGRST301' || error?.status === 406) {
+        // Silently handle table setup issues
+        console.warn('Database table not configured, using defaults');
+      } else if (error?.code !== 'PGRST116') { // Not a "not found" error
+        console.error('Error loading problem data:', error);
+      }
+      // Set safe defaults
+      setUserRating(0);
+      setNotes('');
+    }
+  };
+
+  // Load time statistics with graceful error handling
+  const loadTimeStats = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const stats = await timeTrackingService.getProblemTimeStats(problem.id, user.id);
+      setTimeStats(stats);
+    } catch (error: any) {
+      // Handle database errors gracefully
+      if (error?.status === 406 || error?.code === 'PGRST301') {
+        // Table not set up, use defaults
+        console.warn('Time tracking table not configured, using defaults');
+      }
+      // Set safe default stats
+      setTimeStats({
+        total_time: 0,
+        session_count: 0,
+        average_session: 0,
+        best_session: 0
+      });
+    }
+  };
+
+  // Check if timer is currently running
+  const checkTimerStatus = () => {
+    const running = timeTrackingService.isTimerRunning(problem.id);
+    setIsTimerRunning(running);
+  };
+
+  // Handle timer start/stop based on problem interaction
+  const handleTimerToggle = async () => {
+    if (!user?.id) return;
+
+    try {
+      if (isTimerRunning) {
+        // Stop timer
+        const duration = await timeTrackingService.stopTimer(problem.id, user.id, problem.status);
+        setIsTimerRunning(false);
+        await loadTimeStats(); // Refresh stats
+        console.log(`Timer stopped. Session duration: ${timeTrackingService.formatDuration(duration)}`);
+      } else {
+        // Start timer
+        await timeTrackingService.startTimer(problem.id, user.id, problem.status);
+        setIsTimerRunning(true);
+        console.log('Timer started for problem:', problem.title);
+      }
+    } catch (error) {
+      console.error('Error toggling timer:', error);
+    }
+  };
+
+  // Auto-stop timer when problem is marked as solved/mastered
+  const handleStatusChangeWithTimer = async (newStatus: string) => {
+    if (!user?.id) return;
+
+    // If timer is running and status changes to solved/mastered, stop the timer
+    if (isTimerRunning && (newStatus === 'solved' || newStatus === 'mastered')) {
+      try {
+        const duration = await timeTrackingService.stopTimer(problem.id, user.id, newStatus);
+        setIsTimerRunning(false);
+        await loadTimeStats(); // Refresh stats
+        console.log(`Problem ${newStatus}! Session duration: ${timeTrackingService.formatDuration(duration)}`);
+      } catch (error) {
+        console.error('Error stopping timer:', error);
+      }
+    }
+
+    // Call original status change handler
+    handleStatusChange(newStatus);
+  };
+
+  // Handle rating change and save to Supabase
+  const handleRatingChange = async (rating: number) => {
+    if (!user?.id) return;
+    
+    setUserRating(rating);
+    setIsLoadingRating(true);
+    
+    try {
+      // First get existing progress to preserve all fields
+      const existingProgress = await ProblemProgressService.getProblemProgress(user.id, problem.id);
       
-      data = {
-        ...data,
-        notes: notes,
-        rating: userRating,
-        lastUpdated: new Date().toISOString(),
-        problemTitle: problem.title,
-        difficulty: problem.difficulty,
-        category: problem.category
-      };
+      // Update only the rating while preserving all other existing data
+      await ProblemProgressService.updateProblemStatus(user.id, problem.id, {
+        ...existingProgress, // Preserve all existing fields
+        rating, // Only update the rating
+        status: problem.status || existingProgress?.status || 'not-started'
+      });
+    } catch (error) {
+      console.error('Error saving rating:', error);
+      // Revert rating on error
+      setUserRating(userRating);
+    } finally {
+      setIsLoadingRating(false);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!notes.trim() || !user?.id) return;
+    
+    setIsSavingNotes(true);
+    try {
+      await ProblemProgressService.updateProblemStatus(
+        user.id, 
+        problem.id, 
+        problem.status, 
+        userRating,
+        notes
+      );
       
-      localStorage.setItem(`problem_${problem.id}`, JSON.stringify(data));
-      
-      // Show success feedback
+      // Show success state briefly
       setTimeout(() => {
         setIsSavingNotes(false);
-      }, 500);
-      
+      }, 1000);
     } catch (error) {
       console.error('Error saving notes:', error);
       setIsSavingNotes(false);
+    }
+  };
+
+  const handleCopyProblem = async () => {
+    try {
+      const problemText = `Problem: ${problem.title}
+Topic: ${problem.topic}
+Difficulty: ${problem.difficulty}
+Companies: ${problem.companies?.join(', ') || 'N/A'}
+Remarks: ${problem.remarks || 'N/A'}
+Links: ${problem.links?.join('\n') || 'N/A'}`;
+      
+      await navigator.clipboard.writeText(problemText);
+      setIsCopied(true);
+      
+      // Reset copied state after 2 seconds
+      setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy problem:', error);
+      // Fallback for browsers that don't support clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = `Problem: ${problem.title}\nTopic: ${problem.topic}\nDifficulty: ${problem.difficulty}\nCompanies: ${problem.companies?.join(', ') || 'N/A'}\nRemarks: ${problem.remarks || 'N/A'}\nLinks: ${problem.links?.join('\n') || 'N/A'}`;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setIsCopied(true);
+      setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
     }
   };
 
@@ -389,33 +556,161 @@ export default function ProblemCard({
         {/* Mobile-Optimized Progress Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3 sm:space-y-0">
           <div className="flex flex-col xs:flex-row xs:items-center space-y-2 xs:space-y-0 xs:space-x-4">
-            {/* Difficulty Rating */}
-            <div className="flex items-center space-x-1">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Rate:</span>
-              <div className="flex space-x-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`h-4 w-4 cursor-pointer transition-colors ${
-                      star <= userRating
-                        ? 'text-yellow-400 fill-current'
-                        : 'text-gray-300 hover:text-yellow-400'
-                    }`}
-                    onClick={() => setUserRating(star)}
-                  />
-                ))}
+            {/* Difficulty Rating - Only show for solved or mastered problems */}
+            {(problem.status === 'solved' || problem.status === 'mastered') && (
+              <div className="flex items-center space-x-1">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Rate:</span>
+                <div className="flex space-x-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`h-4 w-4 cursor-pointer transition-colors ${
+                        star <= userRating
+                          ? 'text-yellow-400 fill-current'
+                          : 'text-gray-300 hover:text-yellow-400'
+                      } ${isLoadingRating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={() => !isLoadingRating && handleRatingChange(star)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Time Tracking */}
-            <div className="flex items-center space-x-2">
-              <Timer className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-              <span className="text-sm text-gray-600 dark:text-gray-400">Time: 0 min</span>
+            {/* Time Tracking - Show for all problems */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Timer className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  {timeStats && timeStats.total_time > 0 ? (
+                    <span>Total: {timeTrackingService.formatDuration(timeStats.total_time)}</span>
+                  ) : (
+                    <span>No time tracked</span>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setShowStopwatch(!showStopwatch)}
+                className="px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+              >
+                {showStopwatch ? 'Hide Timer' : 'Show Timer'}
+              </button>
             </div>
           </div>
+
+          {/* Stopwatch Component - Show for all problems */}
+          {showStopwatch && (
+            <div className="col-span-full mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+              {/* Desktop Horizontal Layout */}
+              <div className="hidden sm:flex items-center justify-between space-x-6">
+                {/* Timer Section */}
+                <div className="flex items-center space-x-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">Problem Timer</h4>
+                  <Stopwatch 
+                    size="md"
+                    autoStart={false}
+                    className=""
+                  />
+                </div>
+                
+                {/* Stats Section */}
+                {timeStats && timeStats.session_count > 0 && (
+                  <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center space-x-1">
+                      <span>Sessions:</span>
+                      <span className="font-medium">{timeStats.session_count}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span>Avg:</span>
+                      <span className="font-medium">{timeTrackingService.formatDuration(timeStats.average_session)}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span>Best:</span>
+                      <span className="font-medium">{timeTrackingService.formatDuration(timeStats.best_session)}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Control Button */}
+                <button
+                  onClick={handleTimerToggle}
+                  className={`px-3 py-1 text-xs rounded-full transition-colors whitespace-nowrap border ${
+                    isTimerRunning
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 border-red-300 dark:border-red-600'
+                      : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 border-green-300 dark:border-green-600'
+                  }`}
+                >
+                  {isTimerRunning ? 'Stop Session' : 'Start Session'}
+                </button>
+              </div>
+              
+              {/* Mobile Horizontal Layout */}
+              <div className="sm:hidden">
+                <div className="flex items-center justify-between space-x-3">
+                  {/* Timer Section */}
+                  <div className="flex items-center space-x-3">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">Timer</h4>
+                    <Stopwatch 
+                      size="md"
+                      autoStart={false}
+                      className=""
+                    />
+                  </div>
+                  
+                  {/* Control Button */}
+                  <button
+                    onClick={handleTimerToggle}
+                    className={`px-3 py-1 text-xs rounded-full transition-colors border whitespace-nowrap ${
+                      isTimerRunning
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 border-red-300 dark:border-red-600'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 border-green-300 dark:border-green-600'
+                    }`}
+                  >
+                    {isTimerRunning ? 'Stop' : 'Start'}
+                  </button>
+                </div>
+                
+                {/* Stats Row for Mobile */}
+                {timeStats && timeStats.session_count > 0 && (
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center space-x-1">
+                      <span>Sessions:</span>
+                      <span className="font-medium">{timeStats.session_count}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span>Avg:</span>
+                      <span className="font-medium">{timeTrackingService.formatDuration(timeStats.average_session)}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span>Best:</span>
+                      <span className="font-medium">{timeTrackingService.formatDuration(timeStats.best_session)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           
-          {/* Mobile-Optimized Status Actions */}
-          <div className="flex items-center justify-between sm:justify-end space-x-2">
+          {/* Status Actions - Right aligned on desktop */}
+          <div className="flex items-center justify-end space-x-2 ml-auto">
+            <button 
+              onClick={handleCopyProblem}
+              className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors font-medium flex items-center space-x-1"
+              title="Copy problem details"
+            >
+              {isCopied ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+            
             <button 
               onClick={() => setShowNotes(!showNotes)}
               className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium"
@@ -426,7 +721,7 @@ export default function ProblemCard({
             {/* Status Dropdown */}
             <select
               value={problem.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
+              onChange={(e) => handleStatusChangeWithTimer(e.target.value)}
               className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="not-started">Not Started</option>

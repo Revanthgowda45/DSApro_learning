@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
 import { transformDSAQuestions, getTopics, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
@@ -53,7 +53,6 @@ export default function Problems() {
   
   // Initialize problems with lazy loading
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,7 +77,6 @@ export default function Problems() {
   // Lazy load problems on component mount
   useEffect(() => {
     const loadProblems = async () => {
-      setIsLoading(true);
       try {
         // Use setTimeout to prevent blocking the UI
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -86,8 +84,6 @@ export default function Problems() {
         setProblems(loadedProblems);
       } catch (error) {
         console.error('Error loading problems:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
     
@@ -113,7 +109,25 @@ export default function Problems() {
   }, [searchTerm]);
   
   // Memoized derived data for better performance
-  const categories = useMemo(() => ['All', ...getTopics()], []);
+  const categories = useMemo(() => [
+    'All',
+    'Arrays',
+    'Strings', 
+    '2D Arrays',
+    'Searching & Sorting',
+    'Backtracking',
+    'Linked List',
+    'Stacks & Queues',
+    'Greedy',
+    'Binary Trees',
+    'Binary Search Trees',
+    'Heaps & Hashing',
+    'Graphs',
+    'Tries',
+    'DP',
+    'Bit Manipulation',
+    'Segment Trees'
+  ], []);
   const difficulties = useMemo(() => ['All', 'Easy', 'Medium', 'Hard', 'Very Hard'], []);
   const statuses = useMemo(() => ['All', 'not-started', 'attempted', 'solved', 'mastered'], []);
   const companies = useMemo(() => {
@@ -347,19 +361,7 @@ export default function Problems() {
 
   // Removed unused functions - now handled by ProblemCard component
 
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            <p className="text-gray-600 dark:text-gray-400">Loading problems...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div ref={containerRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -510,7 +512,7 @@ export default function Problems() {
             onChange={(e) => handleFilterChange(setSelectedCompany)(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base touch-manipulation min-h-[44px]"
           >
-            {companies.slice(0, 20).map(company => (
+            {companies.map(company => (
               <option key={company} value={company}>
                 {company === 'All' ? 'All Companies' : company}
               </option>
@@ -668,7 +670,7 @@ export default function Problems() {
       )}
 
       {/* Empty State */}
-      {filteredProblems.length === 0 && !isLoading && (
+      {filteredProblems.length === 0 && (
         <div className="text-center py-12">
           <Filter className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No problems found</h3>

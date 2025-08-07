@@ -11,7 +11,6 @@ export interface UseCalendarDataOptions {
 export interface UseCalendarDataReturn {
   calendarDays: CalendarDay[]
   stats: CalendarStats | null
-  isLoading: boolean
   error: string | null
   currentDate: Date
   setCurrentDate: (date: Date) => void
@@ -36,7 +35,6 @@ export function useCalendarData(options: UseCalendarDataOptions = {}): UseCalend
   // State
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([])
   const [stats, setStats] = useState<CalendarStats | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null)
@@ -46,13 +44,11 @@ export function useCalendarData(options: UseCalendarDataOptions = {}): UseCalend
   // Load calendar data
   const loadCalendarData = useCallback(async () => {
     if (!user?.id) {
-      setIsLoading(false)
       setError('No user authenticated')
       return
     }
 
     try {
-      setIsLoading(true)
       setError(null)
 
       console.log('📅 Loading calendar data for:', {
@@ -111,8 +107,6 @@ export function useCalendarData(options: UseCalendarDataOptions = {}): UseCalend
       setError(err instanceof Error ? err.message : 'Failed to load calendar data')
       setHasRealData(false)
       setDataSource('empty')
-    } finally {
-      setIsLoading(false)
     }
   }, [user?.id, currentDate, period])
 
@@ -199,7 +193,6 @@ export function useCalendarData(options: UseCalendarDataOptions = {}): UseCalend
   return {
     calendarDays,
     stats,
-    isLoading,
     error,
     currentDate,
     setCurrentDate,
@@ -222,33 +215,28 @@ export function useCalendarData(options: UseCalendarDataOptions = {}): UseCalend
 export function useCalendarDateRange(startDate: Date, endDate: Date) {
   const { user } = useAuth()
   const [data, setData] = useState<CalendarDay[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user?.id) {
-      setIsLoading(false)
       return
     }
 
     const loadData = async () => {
       try {
-        setIsLoading(true)
         setError(null)
         
         const days = await CalendarDataService.getDateRangeData(user.id, startDate, endDate)
         setData(days)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load date range data')
-      } finally {
-        setIsLoading(false)
       }
     }
 
     loadData()
   }, [user?.id, startDate, endDate])
 
-  return { data, isLoading, error }
+  return { data, error }
 }
 
 /**
@@ -257,18 +245,14 @@ export function useCalendarDateRange(startDate: Date, endDate: Date) {
 export function useCalendarStats(period: 'week' | 'month' | 'quarter' = 'month') {
   const { user } = useAuth()
   const [stats, setStats] = useState<CalendarStats | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     if (!user?.id) {
-      setIsLoading(false)
       return
     }
 
     const loadStats = async () => {
       try {
-        setIsLoading(true)
-        
         const today = new Date()
         const days = await CalendarDataService.getCalendarData(
           user.id,
@@ -281,13 +265,11 @@ export function useCalendarStats(period: 'week' | 'month' | 'quarter' = 'month')
         setStats(calculatedStats)
       } catch (err) {
         console.error('Failed to load calendar stats:', err)
-      } finally {
-        setIsLoading(false)
       }
     }
 
     loadStats()
   }, [user?.id, period])
 
-  return { stats, isLoading }
+  return { stats }
 }

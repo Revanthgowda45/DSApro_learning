@@ -15,9 +15,12 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import About from './pages/About';
 import AuthTest from './pages/AuthTest';
+import Admin from './pages/Admin';
+import Stopwatch from './pages/Stopwatch';
 import './utils/progressReset'; // Import for console access
 import './utils/resetAnalytics'; // Import reset analytics utility
 import './tests/supabaseIntegrationTest'; // Make test available globally
+import './utils/adminConsole'; // Import admin console utilities
 
 // Initialize production optimizations first
 console.log('🚀 DSA App: Initializing production optimizations...');
@@ -121,6 +124,16 @@ function AppContent() {
           <Route path="/settings" element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <Admin />
+            </ProtectedRoute>
+          } />
+          <Route path="/timer" element={
+            <ProtectedRoute>
+              <Stopwatch />
             </ProtectedRoute>
           } />
           <Route path="/about" element={<About />} />

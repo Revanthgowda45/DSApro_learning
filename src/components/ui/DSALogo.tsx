@@ -1,13 +1,15 @@
 interface DSALogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
 }
 
 export default function DSALogo({ className = '', size = 'md' }: DSALogoProps) {
   const sizeClasses = {
     sm: 'h-5 w-5',
     md: 'h-6 w-6',
-    lg: 'h-8 w-8'
+    lg: 'h-8 w-8',
+    xl: 'h-12 w-12',
+    xxl: 'h-16 w-16'
   };
 
   return (

@@ -4,7 +4,9 @@ import {
   User, 
   Settings, 
   LogOut, 
-  ChevronDown
+  ChevronDown,
+  Crown,
+  Info
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -179,6 +181,27 @@ export default function UserProfileDropdown() {
               <Settings className="w-4 h-4" />
               <span className="text-sm font-medium">Settings</span>
             </Link>
+            
+            <Link
+              to="/about"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center space-x-3 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+            >
+              <Info className="w-4 h-4" />
+              <span className="text-sm font-medium">About</span>
+            </Link>
+            
+            {/* Admin Panel - Only show for admin users */}
+            {user?.is_admin && (
+              <Link
+                to="/admin"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center space-x-3 px-4 py-2 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors duration-200"
+              >
+                <Crown className="w-4 h-4" />
+                <span className="text-sm font-medium">Admin Panel</span>
+              </Link>
+            )}
           </div>
 
           {/* Logout */}

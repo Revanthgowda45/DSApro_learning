@@ -352,9 +352,18 @@ export class ProgressiveAIRecommender {
   }
 
   private getUnsolvedProblems(): Problem[] {
-    return this.allProblems.filter(problem => 
+    const unsolvedProblems = this.allProblems.filter(problem => 
       !this.userProgress.solvedProblems.has(problem.id)
     );
+    
+    console.log('🔍 Filtering unsolved problems:', {
+      totalProblems: this.allProblems.length,
+      solvedProblems: this.userProgress.solvedProblems.size,
+      unsolvedProblems: unsolvedProblems.length,
+      sampleSolvedIds: Array.from(this.userProgress.solvedProblems).slice(0, 5)
+    });
+    
+    return unsolvedProblems;
   }
 
   private updatePendingProblems(problems: Problem[], date: string): void {

@@ -27,6 +27,12 @@ export interface ProblemStatusUpdate {
  */
 async function getCurrentUserId(): Promise<string | null> {
   try {
+    // Check if supabase is configured before using it
+    if (!supabase) {
+      console.warn('Supabase is not configured, cannot get user ID');
+      return null;
+    }
+    
     const { data: { user } } = await supabase.auth.getUser();
     return user?.id || null;
   } catch (error) {

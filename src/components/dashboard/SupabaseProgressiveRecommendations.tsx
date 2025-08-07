@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { ProblemProgressService } from '../../services/problemProgressService';
 import { SupabaseAuthService } from '../../services/supabaseAuthService';
 import { UserSessionService } from '../../services/userSessionService';
+import { DailyRecommendationsService } from '../../services/dailyRecommendationsService';
+import { supabase } from '../../lib/supabase';
 import { 
   getProgressiveDailyRecommendations, 
   markProgressiveProblemSolved,
@@ -87,16 +89,46 @@ interface MachineLearningInsights {
 }
 
 // Helper functions to calculate progress from Supabase data
-function calculateActiveDays(problemProgress: any[]): number {
-  if (!problemProgress.length) return 0;
+function calculateActiveDays(problemProgress: any[], userCreatedAt?: string): number {
+  // If user has solved problems, count unique solve dates
+  if (problemProgress.length > 0) {
+    const uniqueSolveDates = new Set(
+      problemProgress
+        .filter(p => p.solved_at)
+        .map(p => new Date(p.solved_at).toISOString().split('T')[0])
+    );
+    
+    if (uniqueSolveDates.size > 0) {
+      return uniqueSolveDates.size;
+    }
+  }
   
-  const uniqueDates = new Set(
-    problemProgress
-      .filter(p => p.solved_at)
-      .map(p => new Date(p.solved_at).toISOString().split('T')[0])
-  );
+  // For new users or users without solved problems, calculate days since account creation
+  if (userCreatedAt) {
+    // Simple and reliable day calculation
+    const createdDate = userCreatedAt.split('T')[0]; // Get YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0]; // Get today in YYYY-MM-DD format
+    
+    const created = new Date(createdDate + 'T00:00:00Z');
+    const todayDate = new Date(today + 'T00:00:00Z');
+    
+    const diffInMs = todayDate.getTime() - created.getTime();
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24)) + 1; // +1 because creation day = Day 1
+    
+    console.log('🐛 Day calculation debug:', {
+      userCreatedAt,
+      createdDate,
+      today,
+      diffInMs,
+      diffInDays,
+      finalResult: Math.max(1, diffInDays)
+    });
+    
+    return Math.max(1, diffInDays);
+  }
   
-  return uniqueDates.size;
+  // Fallback for users without creation date
+  return 1;
 }
 
 function calculateCurrentStreak(problemProgress: any[]): number {
@@ -135,39 +167,39 @@ function calculateCurrentStreak(problemProgress: any[]): number {
 }
 
 function calculateCurrentLevel(solvedCount: number) {
-  if (solvedCount < 5) {
+  if (solvedCount < 10) {
     return {
       name: 'Absolute Beginner' as const,
       stage: 1,
       problemsSolved: solvedCount,
-      requiredForNext: 5,
+      requiredForNext: 10,
       skillAreas: ['Basic Programming', 'Simple Logic'],
       currentFocus: ['Arrays', 'Strings']
     };
-  } else if (solvedCount < 15) {
+  } else if (solvedCount < 25) {
     return {
       name: 'Beginner' as const,
       stage: 2,
       problemsSolved: solvedCount,
-      requiredForNext: 15,
+      requiredForNext: 25,
       skillAreas: ['Data Structures', 'Basic Algorithms'],
       currentFocus: ['Linked Lists', 'Stacks', 'Queues']
     };
-  } else if (solvedCount < 40) {
+  } else if (solvedCount < 50) {
     return {
       name: 'Intermediate' as const,
       stage: 3,
       problemsSolved: solvedCount,
-      requiredForNext: 40,
+      requiredForNext: 50,
       skillAreas: ['Trees', 'Graphs', 'Recursion'],
       currentFocus: ['Binary Trees', 'DFS', 'BFS']
     };
-  } else if (solvedCount < 80) {
+  } else if (solvedCount < 100) {
     return {
       name: 'Advanced' as const,
       stage: 4,
       problemsSolved: solvedCount,
-      requiredForNext: 80,
+      requiredForNext: 100,
       skillAreas: ['Dynamic Programming', 'Advanced Algorithms'],
       currentFocus: ['DP Patterns', 'Graph Algorithms']
     };
@@ -176,7 +208,7 @@ function calculateCurrentLevel(solvedCount: number) {
       name: 'Expert' as const,
       stage: 5,
       problemsSolved: solvedCount,
-      requiredForNext: 100,
+      requiredForNext: 150,
       skillAreas: ['System Design', 'Optimization'],
       currentFocus: ['Advanced DP', 'Complex Algorithms']
     };
@@ -317,7 +349,7 @@ class AdvancedAIEngine {
     userProgress: ProgressiveUserProgress,
     learningPattern: LearningPattern,
     cognitiveLoad: CognitiveLoadMetrics,
-    targetCount: number = 3
+    targetCount: number = 6
   ): SmartRecommendation[] {
     const scoredProblems = availableProblems.map(problem => {
       const aiConfidence = this.calculateAIConfidence(problem, userProgress, learningPattern);
@@ -796,11 +828,14 @@ export default function SupabaseProgressiveRecommendations() {
   const [adaptiveDifficulty, setAdaptiveDifficulty] = useState<AdaptiveDifficultyEngine | null>(null);
   const [mlInsights, setMlInsights] = useState<MachineLearningInsights | null>(null);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [showAiRecommendations, setShowAiRecommendations] = useState<boolean>(false);
+  // Remove the aiRecommendationsEnabled state since we're using simple hide/show
 
   useEffect(() => {
     // Listen for online/offline status
     const handleOnline = () => {
       setIsOnline(true);
+    // ... (rest of the code remains the same)
       if (user) {
         loadSupabaseData();
       }
@@ -911,11 +946,22 @@ export default function SupabaseProgressiveRecommendations() {
       );
       setCompletedProblems(completed);
       
+      // Get auth user creation date (more accurate than profile)
+      const authUser = await supabase?.auth.getUser();
+      const userCreatedAt = authUser?.data?.user?.created_at;
+      
+      console.log('🐛 Auth user debug:', {
+        userId: user.id,
+        authUserId: authUser?.data?.user?.id,
+        userCreatedAt,
+        authUserEmail: authUser?.data?.user?.email
+      });
+      
       // Calculate real progress from Supabase data
       const updatedProgress: ProgressiveUserProgress = {
         ...defaultProgressiveProgress,
         solvedProblems: completed,
-        totalActiveDays: calculateActiveDays(problemProgress),
+        totalActiveDays: calculateActiveDays(problemProgress, userCreatedAt),
         currentStreak: calculateCurrentStreak(problemProgress),
         currentLevel: calculateCurrentLevel(completed.size),
         lastActiveDate: getLastActiveDate(problemProgress),
@@ -925,9 +971,167 @@ export default function SupabaseProgressiveRecommendations() {
       
       setUserProgress(updatedProgress);
       
-      // Get AI recommendations based on real-time data with Supabase preferences
-      const dailyRec = getProgressiveDailyRecommendations(updatedProgress, preferences);
-      // Keep completed problems in recommendations to show them as green
+      // Check Supabase connection and user mode
+      console.log('🔍 Checking Supabase user mode:', {
+        userId: user.id,
+        userEmail: user.email,
+        isOnline,
+        supabaseConfigured: !!supabase,
+        completedProblemsCount: completed.size,
+        userCreatedAt
+      });
+      
+      // Verify user exists in Supabase profiles table
+      try {
+        if (supabase) {
+          const profileResponse = await supabase
+            .from('profiles')
+            .select('id, email, full_name')
+            .eq('id', user.id)
+            .single();
+            
+          if (profileResponse.error) {
+            console.warn('⚠️ User profile not found in Supabase:', profileResponse.error);
+          } else {
+            console.log('✅ User profile verified in Supabase:', profileResponse.data);
+          }
+        } else {
+          console.warn('⚠️ Supabase not configured');
+        }
+      } catch (error) {
+        console.error('❌ Error checking user profile:', error);
+      }
+      
+      // Get persistent daily recommendations from Supabase
+      let dailyRec = await DailyRecommendationsService.getTodaysRecommendations(user.id);
+      
+      console.log('📊 Daily recommendations check:', {
+        hasExistingRecommendations: !!dailyRec,
+        recommendationDate: dailyRec?.date,
+        problemsCount: dailyRec?.problems?.length || 0,
+        completedCount: dailyRec?.completed || 0,
+        status: dailyRec?.status || 'none'
+      });
+      
+      // Check daily_recommendations table structure and recent data
+      try {
+        if (supabase) {
+          const { data: recentRecs, error: recentError } = await supabase
+            .from('daily_recommendations')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('date', { ascending: false })
+            .limit(3);
+            
+          if (recentError) {
+            console.error('❌ Error checking recent recommendations:', recentError);
+          } else {
+            console.log('📊 Recent recommendations in Supabase:', {
+              count: recentRecs?.length || 0,
+              dates: recentRecs?.map(r => r.date) || [],
+              statuses: recentRecs?.map(r => r.status) || [],
+              problemCounts: recentRecs?.map(r => r.problems?.length || 0) || []
+            });
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error checking daily_recommendations table:', error);
+      }
+      
+      if (!dailyRec) {
+        // No recommendations for today, generate new ones
+        console.log('📅 Generating new daily recommendations for today');
+        
+        // Create updated progress with current solved problems for accurate filtering
+        const progressWithSolvedProblems = {
+          ...updatedProgress,
+          solvedProblems: completed // Use Supabase solved problems
+        };
+        
+        dailyRec = getProgressiveDailyRecommendations(progressWithSolvedProblems, preferences);
+        
+        // Don't filter out solved problems - let them be visible with solved status
+        // Only filter if generating completely fresh recommendations
+        const shouldFilterSolved = completed.size === 0; // Only filter if no problems solved yet
+        
+        if (shouldFilterSolved) {
+          dailyRec.problems = dailyRec.problems.filter(problem => !completed.has(problem.id));
+          dailyRec.newProblems = dailyRec.newProblems.filter(problem => !completed.has(problem.id));
+          dailyRec.carryOverProblems = dailyRec.carryOverProblems.filter(problem => !completed.has(problem.id));
+          dailyRec.totalTarget = dailyRec.problems.length;
+        }
+        
+        console.log('✅ Generated recommendations with solved problems filtered:', {
+          totalProblems: dailyRec.problems.length,
+          newProblems: dailyRec.newProblems.length,
+          carryOverProblems: dailyRec.carryOverProblems.length,
+          solvedProblemsExcluded: completed.size
+        });
+        
+        // Save to Supabase for persistence
+        await DailyRecommendationsService.saveDailyRecommendations(user.id, dailyRec);
+      } else {
+        console.log('📅 Retrieved existing daily recommendations from Supabase');
+        
+        // DON'T filter out solved problems - keep them visible with solved status
+        // This prevents problems from disappearing when marked as solved
+        console.log('📋 Keeping all recommended problems visible, including solved ones');
+        
+        // Only regenerate if ALL problems are solved and we need fresh recommendations
+        const allProblemsSolved = dailyRec.problems.every(problem => completed.has(problem.id));
+        
+        if (allProblemsSolved && dailyRec.problems.length > 0) {
+          console.log('🎉 All daily problems completed! Generating bonus recommendations');
+          
+          const progressWithSolvedProblems = {
+            ...updatedProgress,
+            solvedProblems: completed
+          };
+          
+          // Generate fresh bonus recommendations
+          const bonusRec = getProgressiveDailyRecommendations(progressWithSolvedProblems, preferences);
+          
+          // Filter out solved problems from bonus recommendations
+          bonusRec.problems = bonusRec.problems.filter(problem => !completed.has(problem.id));
+          bonusRec.newProblems = bonusRec.newProblems.filter(problem => !completed.has(problem.id));
+          bonusRec.carryOverProblems = bonusRec.carryOverProblems.filter(problem => !completed.has(problem.id));
+          
+          if (bonusRec.problems.length > 0) {
+            // Add bonus problems to existing recommendations
+            dailyRec.problems = [...dailyRec.problems, ...bonusRec.problems.slice(0, 3)];
+            dailyRec.newProblems = [...dailyRec.newProblems, ...bonusRec.newProblems.slice(0, 3)];
+            dailyRec.totalTarget = dailyRec.problems.length;
+            
+            // Save updated recommendations to Supabase
+            await DailyRecommendationsService.saveDailyRecommendations(user.id, dailyRec);
+            
+            console.log('✨ Added bonus problems for completed daily target');
+          }
+        }
+        
+        // Update completion status based on current progress
+        const completedCount = dailyRec.problems.filter(problem => 
+          completed.has(problem.id)
+        ).length;
+        
+        if (completedCount !== dailyRec.completed) {
+          const newStatus = completedCount === 0 ? 'pending' : 
+                           completedCount === dailyRec.totalTarget ? 'completed' : 'partial';
+          
+          // Update the recommendation status
+          dailyRec.completed = completedCount;
+          dailyRec.status = newStatus;
+          
+          // Save updated status to Supabase
+          await DailyRecommendationsService.updateRecommendationStatus(
+            user.id, 
+            dailyRec.date, 
+            completedCount, 
+            newStatus
+          );
+        }
+      }
+      
       setDailyRecommendation(dailyRec);
       
       const message = getProgressiveMotivationalMessage(updatedProgress);
@@ -987,17 +1191,7 @@ export default function SupabaseProgressiveRecommendations() {
       const insights = AdvancedAIEngine.generateMLInsights(userProgress, pattern);
       setMlInsights(insights);
       
-      // 6. Generate Smart Recommendations
-      if (dailyRecommendation?.problems) {
-        const smartRecs = AdvancedAIEngine.generateSmartRecommendations(
-          dailyRecommendation.problems,
-          userProgress,
-          pattern,
-          cognitive,
-          3
-        );
-        setSmartRecommendations(smartRecs);
-      }
+      // Smart recommendations will be generated manually when user clicks the button
       
       console.log('✅ Advanced AI processing complete:', {
         learningPattern: pattern,
@@ -1013,6 +1207,32 @@ export default function SupabaseProgressiveRecommendations() {
       setAiProcessing(false);
     }
   }, [userProgress, dailyRecommendation]);
+
+  // Generate AI Recommendations
+  const generateAiRecommendations = useCallback(async () => {
+    if (!dailyRecommendation?.problems || !learningPattern || !cognitiveLoad) {
+      console.warn('Missing required data for AI recommendations');
+      return;
+    }
+
+    setAiProcessing(true);
+    try {
+      const smartRecs = AdvancedAIEngine.generateSmartRecommendations(
+        dailyRecommendation.problems,
+        userProgress,
+        learningPattern,
+        cognitiveLoad,
+        6
+      );
+      setSmartRecommendations(smartRecs);
+      setShowAiRecommendations(true);
+      console.log('✅ AI recommendations generated:', smartRecs.length);
+    } catch (error) {
+      console.error('❌ Error generating AI recommendations:', error);
+    } finally {
+      setAiProcessing(false);
+    }
+  }, [dailyRecommendation, userProgress, learningPattern, cognitiveLoad]);
   
   // Memoized AI insights for performance
   const aiInsights = useMemo(() => {
@@ -1213,166 +1433,74 @@ export default function SupabaseProgressiveRecommendations() {
           </div>
         )}
 
-        {/* Advanced AI Insights */}
-        {aiInsights && (
-          <div className="space-y-3 sm:space-y-4">
-            {/* AI Processing Status */}
-            {aiProcessing && (
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-3 sm:p-4">
-                <div className="flex items-center space-x-2">
-                  <Brain className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400 animate-pulse flex-shrink-0" />
-                  <span className="text-xs sm:text-sm font-medium text-purple-900 dark:text-purple-100">Processing Advanced AI Analytics...</span>
-                </div>
-              </div>
-            )}
-
-            {/* Cognitive Load Metrics */}
-            {cognitiveLoad && (
-              <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 space-y-2 sm:space-y-0">
-                  <div className="flex items-center space-x-2">
-                    <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
-                    <h4 className="font-medium text-orange-900 dark:text-orange-100 text-sm sm:text-base">Cognitive Load Analysis</h4>
+        {/* Compact AI Analytics */}
+        {(cognitiveLoad || learningPattern || predictiveAnalytics || mlInsights) && (
+          <div className="bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900/20 dark:to-blue-900/20 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <div className="flex items-center space-x-2 mb-2">
+              <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm">AI Analytics</h4>
+              {aiProcessing && <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              {cognitiveLoad && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Load:</span>
+                    <span className="font-medium">{Math.round(cognitiveLoad.currentLoad)}%</span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${
-                    cognitiveLoad.burnoutRisk === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                    cognitiveLoad.burnoutRisk === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                    'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                  }`}>
-                    {cognitiveLoad.burnoutRisk} risk
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
-                  <div className="flex justify-between sm:block">
-                    <span className="text-orange-700 dark:text-orange-300">Current Load:</span>
-                    <span className="ml-2 font-medium">{Math.round(cognitiveLoad.currentLoad)}%</span>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Efficiency:</span>
+                    <span className="font-medium">{Math.round(cognitiveLoad.learningEfficiency * 100)}%</span>
                   </div>
-                  <div className="flex justify-between sm:block">
-                    <span className="text-orange-700 dark:text-orange-300">Efficiency:</span>
-                    <span className="ml-2 font-medium">{Math.round(cognitiveLoad.learningEfficiency * 100)}%</span>
+                </>
+              )}
+              
+              {learningPattern && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Velocity:</span>
+                    <span className="font-medium">{learningPattern.learningVelocity.toFixed(1)}/week</span>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Learning Pattern Insights */}
-            {learningPattern && (
-              <div className="bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3 sm:p-4">
-                <div className="flex items-center space-x-2 mb-3">
-                  <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                  <h4 className="font-medium text-green-900 dark:text-green-100 text-sm sm:text-base">Learning Pattern Analysis</h4>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
-                  <div className="flex justify-between sm:block">
-                    <span className="text-green-700 dark:text-green-300">Velocity:</span>
-                    <span className="ml-2 font-medium">{learningPattern.learningVelocity.toFixed(1)} problems/week</span>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Consistency:</span>
+                    <span className="font-medium">{Math.round(learningPattern.consistencyScore)}%</span>
                   </div>
-                  <div className="flex justify-between sm:block">
-                    <span className="text-green-700 dark:text-green-300">Consistency:</span>
-                    <span className="ml-2 font-medium">{Math.round(learningPattern.consistencyScore)}%</span>
+                </>
+              )}
+              
+              {predictiveAnalytics && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Next Week:</span>
+                    <span className="font-medium">{Math.round(predictiveAnalytics.nextWeekPerformance)}%</span>
                   </div>
-                  <div className="flex justify-between sm:block">
-                    <span className="text-green-700 dark:text-green-300">Retention:</span>
-                    <span className="ml-2 font-medium">{Math.round(learningPattern.retentionRate)}%</span>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Breakthrough:</span>
+                    <span className="font-medium">{Math.round(predictiveAnalytics.breakthroughProbability)}%</span>
                   </div>
-                  <div className="flex justify-between sm:block">
-                    <span className="text-green-700 dark:text-green-300">Adaptability:</span>
-                    <span className="ml-2 font-medium">{Math.round(learningPattern.adaptabilityIndex)}%</span>
-                  </div>
-                </div>
-                {learningPattern.preferredTopics.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-700">
-                    <span className="text-green-700 dark:text-green-300 text-xs sm:text-sm">Preferred Topics:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {learningPattern.preferredTopics.map((topic, index) => (
-                        <span key={index} className="text-xs px-2 py-1 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 rounded-full whitespace-nowrap">
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Predictive Analytics */}
-            {predictiveAnalytics && (
-              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
-                <div className="flex items-center space-x-2 mb-3">
-                  <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100">Predictive Analytics</h4>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-blue-700 dark:text-blue-300">Next Week Performance:</span>
-                    <span className="ml-2 font-medium">{Math.round(predictiveAnalytics.nextWeekPerformance)}%</span>
-                  </div>
-                  <div>
-                    <span className="text-blue-700 dark:text-blue-300">Breakthrough Probability:</span>
-                    <span className="ml-2 font-medium">{Math.round(predictiveAnalytics.breakthroughProbability)}%</span>
-                  </div>
-                </div>
-                {predictiveAnalytics.difficultyReadiness.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
-                    <span className="text-blue-700 dark:text-blue-300 text-sm">Ready for Difficulties:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {predictiveAnalytics.difficultyReadiness.map((difficulty, index) => (
-                        <span key={index} className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full">
-                          {difficulty}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ML Insights */}
-            {mlInsights && (
-              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
-                <div className="flex items-center space-x-2 mb-3">
-                  <Award className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  <h4 className="font-medium text-purple-900 dark:text-purple-100">Machine Learning Insights</h4>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-purple-700 dark:text-purple-300 text-sm font-medium">User Type:</span>
-                    <span className="ml-2 text-sm">{mlInsights.userCluster}</span>
-                  </div>
-                  {mlInsights.optimizationSuggestions.length > 0 && (
-                    <div>
-                      <span className="text-purple-700 dark:text-purple-300 text-sm font-medium">AI Recommendations:</span>
-                      <ul className="mt-1 space-y-1">
-                        {mlInsights.optimizationSuggestions.slice(0, 2).map((suggestion, index) => (
-                          <li key={index} className="text-sm text-purple-600 dark:text-purple-400 flex items-center space-x-1">
-                            <Lightbulb className="h-3 w-3" />
-                            <span>{suggestion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {mlInsights.riskFactors.length > 0 && mlInsights.riskFactors[0] !== 'No significant risks' && (
-                    <div>
-                      <span className="text-purple-700 dark:text-purple-300 text-sm font-medium">Risk Factors:</span>
-                      <div className="flex items-center space-x-1 mt-1">
-                        <AlertTriangle className="h-3 w-3 text-orange-500" />
-                        <span className="text-sm text-orange-600 dark:text-orange-400">{mlInsights.riskFactors[0]}</span>
-                      </div>
-                    </div>
-                  )}
+                </>
+              )}
+            </div>
+            
+            {mlInsights && mlInsights.optimizationSuggestions.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  💡 {mlInsights.optimizationSuggestions[0]}
                 </div>
               </div>
             )}
           </div>
         )}
 
+
+
         {/* Progressive Learning Path */}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">📚 Progressive Learning Path</h3>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-600 dark:text-gray-400">
-              Day {userProgress.totalActiveDays + 1} • {userProgress.currentLevel.name}
+              Day {userProgress.totalActiveDays} • {userProgress.currentLevel.name}
             </span>
           </div>
         </div>
@@ -1387,12 +1515,40 @@ export default function SupabaseProgressiveRecommendations() {
           </div>
         </div>
 
+        {/* AI Recommendations Generate Button */}
+        {!showAiRecommendations && learningPattern && cognitiveLoad && dailyRecommendation?.problems && (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <h4 className="font-medium text-gray-900 dark:text-gray-100">AI-Powered Smart Recommendations</h4>
+              </div>
+              
+              <button
+                onClick={generateAiRecommendations}
+                disabled={aiProcessing}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {aiProcessing ? 'Analyzing...' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Smart AI Recommendations */}
-        {smartRecommendations.length > 0 ? (
+        {showAiRecommendations && smartRecommendations.length > 0 ? (
           <div className="space-y-4">
-            <div className="flex items-center space-x-2 mb-4">
-              <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              <h4 className="font-medium text-gray-900 dark:text-gray-100">AI-Powered Smart Recommendations</h4>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <h4 className="font-medium text-gray-900 dark:text-gray-100">AI-Powered Smart Recommendations</h4>
+              </div>
+              <button
+                onClick={() => setShowAiRecommendations(false)}
+                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                Hide
+              </button>
             </div>
             {smartRecommendations.map((smartRec) => {
               const problem = smartRec.problem;

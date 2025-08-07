@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, Calendar, TrendingUp, Camera } from 'lucide-react';
-import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
+import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, TrendingUp, Camera, Award } from 'lucide-react';
+
 import { PerformanceMonitor } from '../utils/performanceMonitor';
 import EnhancedCalendar from '../components/profile/EnhancedCalendar';
 import AvatarUpload from '../components/ui/AvatarUpload';
+import { DifficultyStatsService, type DifficultyStats } from '../services/difficultyStatsService';
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
-  const { metrics } = useOptimizedAnalytics();
   const [isEditing, setIsEditing] = useState(false);
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [difficultyStats, setDifficultyStats] = useState<DifficultyStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   
   // Performance monitoring
   useEffect(() => {
@@ -34,19 +36,41 @@ export default function Profile() {
   const [formData, setFormData] = useState(initialFormData);
   const [originalData, setOriginalData] = useState(initialFormData);
   
-  // Optimized stats from analytics
-  const stats = useMemo(() => ({
-    totalSolved: metrics?.solvedProblems || 0,
-    currentStreak: metrics?.currentStreak || 0,
-    longestStreak: metrics?.longestStreak || 0,
-    memberSince: 'March 2024' // This could be dynamic based on first session
-  }), [metrics]);
+  // Note: Removed old stats object as we now use difficulty-based stats
   
   // Update form data when user changes
   useEffect(() => {
     setFormData(initialFormData);
     setOriginalData(initialFormData);
   }, [initialFormData]);
+
+  // Load difficulty statistics
+  useEffect(() => {
+    const loadDifficultyStats = async () => {
+      if (!user?.id) {
+        setStatsLoading(false);
+        return;
+      }
+
+      try {
+        setStatsLoading(true);
+        const stats = await DifficultyStatsService.getDifficultyStats(user.id);
+        setDifficultyStats(stats);
+      } catch (error) {
+        console.error('Error loading difficulty stats:', error);
+        // Set default stats on error
+        setDifficultyStats({
+          easy: { total: 0, solved: 0, percentage: 0 },
+          medium: { total: 0, solved: 0, percentage: 0 },
+          hard: { total: 0, solved: 0, percentage: 0 }
+        });
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    loadDifficultyStats();
+  }, [user?.id]);
 
   const showNotification = useCallback((message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
@@ -149,15 +173,30 @@ export default function Profile() {
               <h2 className="text-2xl font-bold mb-2">{user?.full_name || user?.username || 'User'}</h2>
               <p className="text-blue-100 dark:text-blue-200 text-lg">{user?.email}</p>
               <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-4">
-                <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
-                  {stats.totalSolved} Problems Solved
-                </div>
-                <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
-                  {stats.currentStreak} Day Streak
-                </div>
-                <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
-                  Active Learner
-                </div>
+                {statsLoading ? (
+                  <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium animate-pulse">
+                    Loading stats...
+                  </div>
+                ) : difficultyStats ? (
+                  <>
+                    <div className="bg-green-500/20 px-3 py-1 rounded-full text-sm font-medium border border-green-400/30">
+                      <Award className="inline h-3 w-3 mr-1" />
+                      Easy: {difficultyStats.easy.solved}/{difficultyStats.easy.total}
+                    </div>
+                    <div className="bg-yellow-500/20 px-3 py-1 rounded-full text-sm font-medium border border-yellow-400/30">
+                      <Award className="inline h-3 w-3 mr-1" />
+                      Medium: {difficultyStats.medium.solved}/{difficultyStats.medium.total}
+                    </div>
+                    <div className="bg-red-500/20 px-3 py-1 rounded-full text-sm font-medium border border-red-400/30">
+                      <Award className="inline h-3 w-3 mr-1" />
+                      Hard: {difficultyStats.hard.solved}/{difficultyStats.hard.total}
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
+                    Active Learner
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -325,42 +364,173 @@ export default function Profile() {
           </div>
           {/* Right Column - Stats & Info */}
           <div className="space-y-8">
-            {/* Achievement Overview */}
+            {/* Problem Difficulty Stats */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Achievement Overview</h3>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Problem Progress</h3>
                 <TrendingUp className="h-5 w-5 text-gray-400 dark:text-gray-500" />
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="text-center p-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl border border-green-200 dark:border-green-700">
-                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.totalSolved}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Problems Solved</div>
+              
+              {/* Overall Progress Bar */}
+              {statsLoading ? (
+                <div className="mb-4 animate-pulse">
+                  <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-xl border border-orange-200 dark:border-orange-700">
-                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.currentStreak}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Current Streak</div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Member since</span>
+              ) : difficultyStats ? (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Overall Progress</span>
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                      {difficultyStats.easy.solved + difficultyStats.medium.solved + difficultyStats.hard.solved}/
+                      {difficultyStats.easy.total + difficultyStats.medium.total + difficultyStats.hard.total}
+                    </span>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{stats.memberSince}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Target className="h-5 w-5 text-blue-500 dark:text-blue-400" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Best streak</span>
+                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 overflow-hidden">
+                    <div className="h-full flex">
+                      {/* Easy Section */}
+                      <div 
+                        className="relative border-r border-gray-300 dark:border-gray-500 transition-all duration-500"
+                        style={{ 
+                          width: `${(difficultyStats.easy.total / (difficultyStats.easy.total + difficultyStats.medium.total + difficultyStats.hard.total)) * 100}%` 
+                        }}
+                        title={`Easy: ${difficultyStats.easy.solved}/${difficultyStats.easy.total}`}
+                      >
+                        <div 
+                          className="bg-green-500 h-full transition-all duration-500"
+                          style={{ 
+                            width: `${difficultyStats.easy.percentage}%` 
+                          }}
+                        ></div>
+                      </div>
+                      {/* Medium Section */}
+                      <div 
+                        className="relative border-r border-gray-300 dark:border-gray-500 transition-all duration-500"
+                        style={{ 
+                          width: `${(difficultyStats.medium.total / (difficultyStats.easy.total + difficultyStats.medium.total + difficultyStats.hard.total)) * 100}%` 
+                        }}
+                        title={`Medium: ${difficultyStats.medium.solved}/${difficultyStats.medium.total}`}
+                      >
+                        <div 
+                          className="bg-yellow-500 h-full transition-all duration-500"
+                          style={{ 
+                            width: `${difficultyStats.medium.percentage}%` 
+                          }}
+                        ></div>
+                      </div>
+                      {/* Hard Section */}
+                      <div 
+                        className="relative transition-all duration-500"
+                        style={{ 
+                          width: `${(difficultyStats.hard.total / (difficultyStats.easy.total + difficultyStats.medium.total + difficultyStats.hard.total)) * 100}%` 
+                        }}
+                        title={`Hard: ${difficultyStats.hard.solved}/${difficultyStats.hard.total}`}
+                      >
+                        <div 
+                          className="bg-red-500 h-full transition-all duration-500"
+                          style={{ 
+                            width: `${difficultyStats.hard.percentage}%` 
+                          }}
+                        ></div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{stats.longestStreak} days</span>
+                  <div className="flex justify-between mt-1 text-xs">
+                    <span className="text-green-600 dark:text-green-400 font-medium">
+                      Easy: {difficultyStats.easy.solved}/{difficultyStats.easy.total}
+                    </span>
+                    <span className="text-yellow-600 dark:text-yellow-400 font-medium">
+                      Medium: {difficultyStats.medium.solved}/{difficultyStats.medium.total}
+                    </span>
+                    <span className="text-red-600 dark:text-red-400 font-medium">
+                      Hard: {difficultyStats.hard.solved}/{difficultyStats.hard.total}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : null}
+
+              {statsLoading ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="animate-pulse">
+                      <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : difficultyStats ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Easy Problems */}
+                  <div className={`p-2 rounded-lg border text-center ${
+                    DifficultyStatsService.getDifficultyColor('easy').bg
+                  } ${
+                    DifficultyStatsService.getDifficultyColor('easy').border
+                  }`}>
+                    <Award className={`h-4 w-4 mx-auto mb-1 ${
+                      DifficultyStatsService.getDifficultyColor('easy').icon
+                    }`} />
+                    <div className={`text-lg font-bold ${
+                      DifficultyStatsService.getDifficultyColor('easy').text
+                    }`}>
+                      {difficultyStats.easy.solved}/{difficultyStats.easy.total}
+                    </div>
+                    <div className={`text-xs ${
+                      DifficultyStatsService.getDifficultyColor('easy').text
+                    }`}>
+                      {difficultyStats.easy.percentage}%
+                    </div>
+                  </div>
+
+                  {/* Medium Problems */}
+                  <div className={`p-2 rounded-lg border text-center ${
+                    DifficultyStatsService.getDifficultyColor('medium').bg
+                  } ${
+                    DifficultyStatsService.getDifficultyColor('medium').border
+                  }`}>
+                    <Award className={`h-4 w-4 mx-auto mb-1 ${
+                      DifficultyStatsService.getDifficultyColor('medium').icon
+                    }`} />
+                    <div className={`text-lg font-bold ${
+                      DifficultyStatsService.getDifficultyColor('medium').text
+                    }`}>
+                      {difficultyStats.medium.solved}/{difficultyStats.medium.total}
+                    </div>
+                    <div className={`text-xs ${
+                      DifficultyStatsService.getDifficultyColor('medium').text
+                    }`}>
+                      {difficultyStats.medium.percentage}%
+                    </div>
+                  </div>
+
+                  {/* Hard Problems */}
+                  <div className={`p-2 rounded-lg border text-center ${
+                    DifficultyStatsService.getDifficultyColor('hard').bg
+                  } ${
+                    DifficultyStatsService.getDifficultyColor('hard').border
+                  }`}>
+                    <Award className={`h-4 w-4 mx-auto mb-1 ${
+                      DifficultyStatsService.getDifficultyColor('hard').icon
+                    }`} />
+                    <div className={`text-lg font-bold ${
+                      DifficultyStatsService.getDifficultyColor('hard').text
+                    }`}>
+                      {difficultyStats.hard.solved}/{difficultyStats.hard.total}
+                    </div>
+                    <div className={`text-xs ${
+                      DifficultyStatsService.getDifficultyColor('hard').text
+                    }`}>
+                      {difficultyStats.hard.percentage}%
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No progress data available</p>
+                </div>
+              )}
             </div>
 
-            {/* Learning Preferences */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+            {/* Learning Preferences - Hidden on Mobile */}
+            <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Learning Preferences</h3>
                <div className="space-y-3">
                 <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-3 rounded-lg border border-green-200 dark:border-green-700">
