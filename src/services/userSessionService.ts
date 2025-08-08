@@ -318,7 +318,20 @@ export class UserSessionService {
     today.setHours(0, 0, 0, 0)
     
     for (let i = 0; i < sessions.length; i++) {
+      // Validate session_date before processing
+      if (!sessions[i].session_date) {
+        console.warn('⚠️ Skipping session with missing session_date in streak calculation:', sessions[i])
+        continue
+      }
+      
       const sessionDate = new Date(sessions[i].session_date)
+      
+      // Check if the date is valid
+      if (isNaN(sessionDate.getTime())) {
+        console.warn('⚠️ Skipping session with invalid session_date in streak calculation:', sessions[i].session_date, sessions[i])
+        continue
+      }
+      
       sessionDate.setHours(0, 0, 0, 0)
       
       const expectedDate = new Date(today)
@@ -345,13 +358,19 @@ export class UserSessionService {
     let currentStreak = 0
     let previousDate: Date | null = null
     
-    // Sort sessions by date ascending
+    // Sort sessions by date ascending, filtering out invalid dates
     const sortedSessions = sessions
-      .filter(s => s.problems_solved > 0)
+      .filter(s => s.problems_solved > 0 && s.session_date && !isNaN(new Date(s.session_date).getTime()))
       .sort((a, b) => new Date(a.session_date).getTime() - new Date(b.session_date).getTime())
     
     for (const session of sortedSessions) {
       const sessionDate = new Date(session.session_date)
+      
+      // Additional safety check (should not be needed due to filter above)
+      if (isNaN(sessionDate.getTime())) {
+        console.warn('⚠️ Skipping session with invalid date in longest streak:', session.session_date, session)
+        continue
+      }
       
       if (previousDate) {
         const daysDiff = Math.floor(
@@ -396,9 +415,29 @@ export class UserSessionService {
     const weeks: Record<string, { problems: number; time: number; sessions: number }> = {}
     
     sessions.forEach(session => {
+      // Validate session_date before processing
+      if (!session.session_date) {
+        console.warn('⚠️ Skipping session with missing session_date:', session)
+        return
+      }
+      
       const date = new Date(session.session_date)
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ Skipping session with invalid session_date:', session.session_date, session)
+        return
+      }
+      
       const weekStart = new Date(date)
       weekStart.setDate(date.getDate() - date.getDay()) // Start of week (Sunday)
+      
+      // Double-check weekStart is valid before calling toISOString
+      if (isNaN(weekStart.getTime())) {
+        console.warn('⚠️ Skipping session with invalid weekStart date:', weekStart, session)
+        return
+      }
+      
       const weekKey = weekStart.toISOString().split('T')[0]
       
       if (!weeks[weekKey]) {
@@ -444,6 +483,19 @@ export class UserSessionService {
     const heatmapData: Record<string, number> = {}
     
     sessions.forEach(session => {
+      // Validate session_date before processing
+      if (!session.session_date) {
+        console.warn('⚠️ Skipping session with missing session_date in heatmap:', session)
+        return
+      }
+      
+      // Validate that the date string is properly formatted
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (!dateRegex.test(session.session_date)) {
+        console.warn('⚠️ Skipping session with invalid date format in heatmap:', session.session_date, session)
+        return
+      }
+      
       heatmapData[session.session_date] = session.problems_solved
     })
     

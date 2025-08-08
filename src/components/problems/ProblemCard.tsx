@@ -4,7 +4,7 @@ import {
   Clock, 
   Star, 
   Bookmark, 
-  BookmarkCheck,
+
   Target,
   TrendingUp,
   Users,
@@ -50,6 +50,43 @@ export default function ProblemCard({
   const [timeStats, setTimeStats] = useState<ProblemTimeStats | null>(null);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(problem.isBookmarked);
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
+
+  // Load problem data when component mounts (optimized to prevent double fetching)
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadData = async () => {
+      if (!user?.id || !problem.id || !isMounted) return;
+      
+      try {
+        // Load data sequentially to reduce API pressure
+        if (isMounted) await loadProblemData();
+        if (isMounted) await loadTimeStats();
+        if (isMounted) checkTimerStatus();
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error loading problem data:', error);
+        }
+      }
+    };
+
+    // Use requestIdleCallback to load data when browser is idle (prevents blocking)
+    const scheduleLoad = () => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => loadData(), { timeout: 1000 });
+      } else {
+        setTimeout(loadData, 100); // Fallback for browsers without requestIdleCallback
+      }
+    };
+
+    scheduleLoad();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, problem.id]); // Only re-run if user or problem changes
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -135,8 +172,37 @@ export default function ProblemCard({
     onStatusChange?.(problem.id, newStatus);
   };
 
-  const handleBookmarkToggle = () => {
-    onBookmarkToggle?.(problem.id);
+  const handleBookmarkToggle = async () => {
+    if (!user) return;
+    
+    setIsBookmarkLoading(true);
+    const newBookmarkState = !isBookmarked;
+    
+    try {
+      // Update local state immediately for better UX
+      setIsBookmarked(newBookmarkState);
+      
+      // Save to Supabase
+      await ProblemProgressService.updateProblemStatus(
+        user.id,
+        problem.id,
+        {
+          status: problem.status,
+          is_bookmarked: newBookmarkState
+        }
+      );
+      
+      // Call the optional callback
+      onBookmarkToggle?.(problem.id);
+      
+      console.log('✅ Bookmark updated successfully:', { problemId: problem.id, isBookmarked: newBookmarkState });
+    } catch (error) {
+      console.error('❌ Failed to update bookmark:', error);
+      // Revert local state on error
+      setIsBookmarked(!newBookmarkState);
+    } finally {
+      setIsBookmarkLoading(false);
+    }
   };
 
   // Generate unique AI insights for each problem
@@ -211,6 +277,7 @@ export default function ProblemCard({
       if (progress) {
         setUserRating(progress.rating || 0);
         setNotes(progress.notes || '');
+        setIsBookmarked(progress.is_bookmarked || false);
       }
     } catch (error: any) {
       // Handle 406 errors gracefully (table not set up)
@@ -223,6 +290,7 @@ export default function ProblemCard({
       // Set safe defaults
       setUserRating(0);
       setNotes('');
+      setIsBookmarked(problem.isBookmarked || false);
     }
   };
 
@@ -311,8 +379,9 @@ export default function ProblemCard({
       // Update only the rating while preserving all other existing data
       await ProblemProgressService.updateProblemStatus(user.id, problem.id, {
         ...existingProgress, // Preserve all existing fields
-        rating, // Only update the rating
-        status: problem.status || existingProgress?.status || 'not-started'
+        rating: rating > 0 ? rating : null, // Only save rating if > 0
+        status: problem.status || existingProgress?.status || 'not-started',
+        is_bookmarked: isBookmarked // Add this line to preserve the bookmark status
       });
     } catch (error) {
       console.error('Error saving rating:', error);
@@ -331,17 +400,22 @@ export default function ProblemCard({
       await ProblemProgressService.updateProblemStatus(
         user.id, 
         problem.id, 
-        problem.status, 
-        userRating,
-        notes
+        {
+          status: problem.status,
+          notes: notes,
+          rating: userRating > 0 ? userRating : null, // Only save rating if > 0
+          is_bookmarked: isBookmarked
+        }
       );
+      
+      console.log('✅ Notes saved successfully:', { problemId: problem.id, notes: notes.substring(0, 50) + '...' });
       
       // Show success state briefly
       setTimeout(() => {
         setIsSavingNotes(false);
       }, 1000);
     } catch (error) {
-      console.error('Error saving notes:', error);
+      console.error('❌ Error saving notes:', error);
       setIsSavingNotes(false);
     }
   };
@@ -349,15 +423,15 @@ export default function ProblemCard({
   const handleCopyProblem = async () => {
     try {
       const problemText = `Problem: ${problem.title}
-Topic: ${problem.topic}
+Topic: ${problem.category}
 Difficulty: ${problem.difficulty}
 Companies: ${problem.companies?.join(', ') || 'N/A'}
 Remarks: ${problem.remarks || 'N/A'}
-Links: ${problem.links?.join('\n') || 'N/A'}`;
-      
+Link: ${problem.link || 'N/A'}`;
+
       await navigator.clipboard.writeText(problemText);
       setIsCopied(true);
-      
+
       // Reset copied state after 2 seconds
       setTimeout(() => {
         setIsCopied(false);
@@ -366,7 +440,7 @@ Links: ${problem.links?.join('\n') || 'N/A'}`;
       console.error('Failed to copy problem:', error);
       // Fallback for browsers that don't support clipboard API
       const textArea = document.createElement('textarea');
-      textArea.value = `Problem: ${problem.title}\nTopic: ${problem.topic}\nDifficulty: ${problem.difficulty}\nCompanies: ${problem.companies?.join(', ') || 'N/A'}\nRemarks: ${problem.remarks || 'N/A'}\nLinks: ${problem.links?.join('\n') || 'N/A'}`;
+      textArea.value = `Problem: ${problem.title}\nTopic: ${problem.category}\nDifficulty: ${problem.difficulty}\nCompanies: ${problem.companies?.join(', ') || 'N/A'}\nRemarks: ${problem.remarks || 'N/A'}\nLink: ${problem.link || 'N/A'}`;
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
@@ -397,9 +471,25 @@ Links: ${problem.links?.join('\n') || 'N/A'}`;
                 {problem.title}
               </h3>
               <div className="flex items-center space-x-1 flex-shrink-0">
-                {problem.isBookmarked && (
-                  <BookmarkCheck className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
-                )}
+                <button
+                  onClick={handleBookmarkToggle}
+                  disabled={isBookmarkLoading}
+                  className={`p-1 rounded-md transition-colors ${
+                    isBookmarkLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  title={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+                >
+                  {isBookmarkLoading ? (
+                    <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <Bookmark className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors ${
+                      isBookmarked ? 'text-yellow-500 fill-current' : 'text-gray-400 hover:text-yellow-500'
+                    }`} />
+                  )}
+                </button>
                 {problem.status === 'mastered' && (
                   <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
                 )}
@@ -525,17 +615,7 @@ Links: ${problem.links?.join('\n') || 'N/A'}`;
 
           {/* Mobile-Optimized Action Buttons */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:ml-4 mt-3 sm:mt-0">
-            <button 
-              onClick={handleBookmarkToggle}
-              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
-                problem.isBookmarked 
-                  ? 'text-yellow-500 bg-yellow-100 dark:bg-yellow-900/20 hover:bg-yellow-200 dark:hover:bg-yellow-900/30' 
-                  : 'text-gray-400 dark:text-gray-500 hover:text-yellow-500 dark:hover:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
-              }`}
-              title={problem.isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-            >
-              {problem.isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-            </button>
+
             
             {(problem.link || problem.leetcodeLink) && (
               <a
