@@ -14,6 +14,7 @@ import DailyChallenge from '../components/dashboard/DailyChallenge';
 import { UserSessionService } from '../services/userSessionService';
 import { useAnalyticsRefresh } from '../hooks/useAnalyticsRefresh';
 import { useOptimizedAnalytics, useQuickStats } from '../hooks/useOptimizedAnalytics';
+import { useNotifications } from '../hooks/useNotifications';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ export default function Dashboard() {
   });
   const { metrics: progressMetrics, loading, error, refresh } = useOptimizedAnalytics();
   const { stats: quickStats } = useQuickStats();
+  const { checkDailyNotifications } = useNotifications();
   
   // Debug logging to understand what's happening
   console.log('🔍 Dashboard Debug:', {
@@ -75,8 +77,15 @@ export default function Dashboard() {
     if (user?.id) {
       console.log('🔄 User detected, loading analytics for:', user.id);
       loadRealAnalytics();
+      
+      // Check for daily notifications after a delay
+      const notificationTimer = setTimeout(() => {
+        checkDailyNotifications();
+      }, 2000);
+      
+      return () => clearTimeout(notificationTimer);
     }
-  }, [user?.id]);
+  }, [user?.id, checkDailyNotifications]);
 
   // Additional effect to handle page reload scenarios
   useEffect(() => {

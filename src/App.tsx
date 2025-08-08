@@ -19,12 +19,18 @@ import Admin from './pages/Admin';
 import Stopwatch from './pages/Stopwatch';
 import './utils/progressReset'; // Import for console access
 import './utils/resetAnalytics'; // Import reset analytics utility
+import { NotificationService } from './services/notificationService';
 
 import './utils/adminConsole'; // Import admin console utilities
 
 // Initialize production optimizations first
 console.log('🚀 DSA App: Initializing production optimizations...');
 initProductionOptimizations();
+
+// Initialize notification service
+NotificationService.initialize().catch(error => {
+  console.warn('⚠️ DSA App: Failed to initialize notifications:', error);
+});
 
 // Clean up localStorage on app startup
 try {

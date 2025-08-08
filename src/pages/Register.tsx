@@ -146,12 +146,14 @@ export default function Register() {
   return (
     <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       {/* Left Branding Panel - Fixed on desktop */}
-      <div className="hidden lg:flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200 dark:bg-slate-900 dark:bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] dark:from-slate-800 dark:to-slate-900 p-12 text-slate-900 dark:text-white text-center lg:fixed lg:top-0 lg:left-0 lg:w-1/2 lg:h-full">
-        <div className="bg-white/80 dark:bg-white/20 p-6 rounded-full shadow-lg backdrop-blur-sm">
-            <DSALogo size="xl" className="text-slate-800 dark:text-white" />
+      <div className="hidden lg:flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 p-12 text-gray-900 dark:text-gray-100 text-center lg:fixed lg:top-0 lg:left-0 lg:w-1/2 lg:h-full">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-full shadow-xl border border-gray-200 dark:border-gray-700">
+          <DSALogo size="xl" className="text-green-600 dark:text-green-400" />
         </div>
-        <h1 className="mt-8 text-4xl font-bold tracking-tight">Master Your DSA Journey</h1>
-        <p className="mt-4 text-lg max-w-sm opacity-90">
+        <h1 className="mt-8 text-4xl font-bold tracking-tight">
+          Master Your <span className="text-green-600 dark:text-green-400">DSA</span> <span className="text-blue-600 dark:text-blue-400">Journey</span>
+        </h1>
+        <p className="mt-4 text-lg max-w-sm text-gray-600 dark:text-gray-400">
           Track your progress, get smart recommendations, and stay motivated on your path to success.
         </p>
       </div>

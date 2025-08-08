@@ -13,7 +13,6 @@ import {
   Settings,
   User,
   LogOut,
-  Crown,
   Timer,
   Info
 } from 'lucide-react';
@@ -111,25 +110,26 @@ export default function Navbar() {
               ))}
             </div>
 
-            {/* Desktop User Menu */}
-            <div className="hidden md:flex items-center space-x-3">
+            {/* Desktop Right Side */}
+            <div className="hidden lg:flex items-center space-x-4">
               <ThemeToggle />
+              
+
+
               <UserProfileDropdown />
             </div>
 
             {/* Mobile Menu Button */}
-            <div className="md:hidden flex items-center space-x-2">
+            <div className="lg:hidden flex items-center space-x-2">
               <ThemeToggle />
+              
+
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all duration-200"
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 aria-label="Toggle mobile menu"
               >
-                {isMobileMenuOpen ? (
-                  <X className="h-6 w-6" />
-                ) : (
-                  <Menu className="h-6 w-6" />
-                )}
+                {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
             </div>
           </div>
@@ -253,17 +253,7 @@ export default function Navbar() {
                   </Link>
                 ))}
                 
-                {/* Admin Panel - Only show for admin users in mobile menu */}
-                {user?.is_admin && (
-                  <Link
-                    to="/admin"
-                    className="flex items-center space-x-3 p-3 rounded-lg text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors"
-                  >
-                    <Crown className="h-5 w-5" />
-                    <span className="font-medium">Admin Panel</span>
-                  </Link>
-                )}
-                
+
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-3 p-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full text-left"

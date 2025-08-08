@@ -9,7 +9,6 @@ import {
   Trash2,
   CheckCircle,
   AlertCircle,
-  Bell,
   XCircle
 } from 'lucide-react';
 import { PerformanceMonitor } from '../utils/performanceMonitor';
@@ -17,15 +16,12 @@ import { DataExportService } from '../services/dataExportService';
 import { AccountDeletionService } from '../services/accountDeletionService';
 import ThemeSelector from '../components/settings/ThemeSelector';
 import LearningPreferences from '../components/settings/LearningPreferences';
+import NotificationSettings from '../components/settings/NotificationSettings';
 import AccountDeletionModal from '../components/modals/AccountDeletionModal';
 
 export default function Settings() {
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState({
-    dailyReminders: true,
-    streakAlerts: true,
-    achievements: true
-  });
+  // Notification settings are now handled by NotificationSettings component
   
   // Performance monitoring
   useEffect(() => {
@@ -37,27 +33,7 @@ export default function Settings() {
     };
   }, []);
 
-  // Optimized notification change handler
-  const handleNotificationChange = useCallback((key: string) => {
-    const timer = PerformanceMonitor.startTimer('settings_notification_change');
-    
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key as keyof typeof prev]
-    }));
-    
-    // Save to localStorage or API
-    try {
-      localStorage.setItem('notifications', JSON.stringify({
-        ...notifications,
-        [key]: !notifications[key as keyof typeof notifications]
-      }));
-    } catch (error) {
-      console.error('Failed to save notification settings:', error);
-    }
-    
-    timer();
-  }, [notifications]);
+  // Notification settings are now handled by NotificationSettings component
   
   // State for export operations
   const [isExporting, setIsExporting] = useState(false);
@@ -234,42 +210,8 @@ export default function Settings() {
         }} />
 
         {/* Notifications */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Notifications</h2>
-          </div>
-          
-          <div className="space-y-4">
-            {Object.entries(notifications).map(([key, value]) => (
-              <div key={key} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {key === 'dailyReminders' && 'Daily Study Reminders'}
-                    {key === 'streakAlerts' && 'Streak Alerts'}
-                    {key === 'achievements' && 'Achievement Notifications'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {key === 'dailyReminders' && 'Get reminded to practice daily'}
-                    {key === 'streakAlerts' && 'Alerts when your streak is at risk'}
-                    {key === 'achievements' && 'Celebrate your milestones'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleNotificationChange(key)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 ${
-                    value ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      value ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            ))}
-          </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <NotificationSettings />
         </div>
 
         {/* Data & Privacy */}
