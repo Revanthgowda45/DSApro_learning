@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, TrendingUp, Camera, Award } from 'lucide-react';
+import { User, Clock, Zap, Target, Save, Edit, CheckCircle, XCircle, TrendingUp, Camera, Award, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { PerformanceMonitor } from '../utils/performanceMonitor';
 import EnhancedCalendar from '../components/profile/EnhancedCalendar';
@@ -232,13 +233,20 @@ export default function Profile() {
                       </button>
                     </>
                   ) : (
+                    <div className="flex items-center space-x-3">
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium"
                     >
                       <Edit className="h-4 w-4" />
                       <span>Edit</span>
                     </button>
+                    <Link to="/settings" className="flex items-center">
+                      <button className="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors shadow-sm">
+                        <Settings className="h-5 w-5" />
+                      </button>
+                    </Link>
+                  </div>
                   )}
                 </div>
               </div>
