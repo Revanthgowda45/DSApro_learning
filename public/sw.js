@@ -299,19 +299,103 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
-        // Return a simple offline page if available
+        // Return a simple offline page with system theme
         return new Response(`
           <!DOCTYPE html>
-          <html>
+          <html lang="en">
             <head>
               <title>DSA Practice - Offline</title>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                  background: #f7fafc;
+                  min-height: 100vh;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  margin: 0;
+                  color: #2d3748;
+                }
+                
+                .container {
+                  background: white;
+                  padding: 2rem;
+                  border-radius: 12px;
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+                  text-align: center;
+                  max-width: 400px;
+                  width: 90%;
+                }
+                
+                .icon {
+                  font-size: 3rem;
+                  margin-bottom: 1rem;
+                }
+                
+                .title {
+                  font-size: 1.5rem;
+                  font-weight: 600;
+                  margin-bottom: 0.5rem;
+                }
+                
+                .message {
+                  color: #718096;
+                  margin-bottom: 1.5rem;
+                }
+                
+                .retry-btn {
+                  background: #4299e1;
+                  color: white;
+                  border: none;
+                  padding: 0.75rem 1.5rem;
+                  border-radius: 8px;
+                  font-size: 0.9rem;
+                  font-weight: 500;
+                  cursor: pointer;
+                  transition: background 0.2s;
+                }
+                
+                .retry-btn:hover {
+                  background: #3182ce;
+                }
+                
+                /* Dark theme styles */
+                @media (prefers-color-scheme: dark) {
+                  body {
+                    background: #1a202c;
+                    color: #f7fafc;
+                  }
+                  
+                  .container {
+                    background: #2d3748;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+                  }
+                  
+                  .message {
+                    color: #a0aec0;
+                  }
+                  
+                  .retry-btn {
+                    background: #4299e1;
+                  }
+                  
+                  .retry-btn:hover {
+                    background: #63b3ed;
+                  }
+                }
+              </style>
             </head>
-            <body style="font-family: system-ui; text-align: center; padding: 2rem;">
-              <h1>🔌 You're Offline</h1>
-              <p>Please check your internet connection and try again.</p>
-              <button onclick="window.location.reload()">🔄 Retry</button>
+            <body>
+              <div class="container">
+                <div class="icon">🌐</div>
+                <h1 class="title">You're Offline</h1>
+                <p class="message">Please check your internet connection and try again.</p>
+                <button class="retry-btn" onclick="window.location.reload()">
+                  🔄 Retry
+                </button>
+              </div>
             </body>
           </html>
         `, {
