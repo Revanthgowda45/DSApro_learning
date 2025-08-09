@@ -468,7 +468,7 @@ export class OptimizedAnalyticsService {
       unsubscribe: () => {
         clearTimeout(debounceTimer);
         progressSubscription.unsubscribe();
-        sessionSubscription.unsubscribe();
+        sessionSubscription?.unsubscribe();
       }
     };
   }

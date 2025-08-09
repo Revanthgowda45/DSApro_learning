@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
-import { transformDSAQuestions, getTopics, Problem } from '../data/dsaDatabase';
+import { transformDSAQuestions, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
 import { PerformanceMonitor } from '../utils/performanceMonitor';
@@ -25,29 +25,113 @@ export default function Problems() {
     };
   }, []);
   
-  // Optimized problem loading with performance monitoring
-  const loadProblemsWithProgress = useCallback(() => {
-    const timer = PerformanceMonitor.startTimer('problems_load');
-    const userProgress: Record<string, any> = {};
+  // Fast initial load with cached data (including bookmarks)
+  const loadProblemsInitial = useCallback(() => {
+    const timer = PerformanceMonitor.startTimer('problems_initial_load');
     
     try {
-      // Load all problem statuses from localStorage
+      // Load from localStorage first for immediate display
       const statusKey = 'dsa_problem_statuses';
       const existingStatuses = localStorage.getItem(statusKey);
       const problemStatuses: Record<string, string> = existingStatuses ? JSON.parse(existingStatuses) : {};
       
-      // Build user progress object from all statuses
+      // Also load cached bookmark data from localStorage
+      const bookmarkKey = 'dsa_problem_bookmarks';
+      const existingBookmarks = localStorage.getItem(bookmarkKey);
+      const problemBookmarks: Record<string, boolean> = existingBookmarks ? JSON.parse(existingBookmarks) : {};
+      
+      const userProgress: Record<string, any> = {};
       Object.entries(problemStatuses).forEach(([problemId, status]) => {
-        userProgress[problemId] = { status };
+        userProgress[problemId] = { 
+          status,
+          isBookmarked: problemBookmarks[problemId] || false
+        };
+      });
+      
+      // Also include problems that are only bookmarked but have no status
+      Object.entries(problemBookmarks).forEach(([problemId, isBookmarked]) => {
+        if (!userProgress[problemId]) {
+          userProgress[problemId] = { 
+            status: 'not-started',
+            isBookmarked
+          };
+        }
       });
       
       const result = transformDSAQuestions(userProgress);
-      timer(); // End timing
+      timer();
       return result;
     } catch (error) {
-      console.error('Error loading problem statuses:', error);
-      timer(); // End timing even on error
+      console.error('Error loading initial problems:', error);
+      timer();
       return transformDSAQuestions({});
+    }
+  }, []);
+
+  // Background sync with Supabase (with caching)
+  const syncWithSupabase = useCallback(async () => {
+    try {
+      // Check if we've synced recently (cache for 2 minutes)
+      const lastSync = localStorage.getItem('last_supabase_sync');
+      const now = Date.now();
+      if (lastSync && (now - parseInt(lastSync)) < 120000) {
+        console.log('⏭️ Skipping sync - cached data is fresh');
+        return; // Skip if synced within last 2 minutes
+      }
+      
+      const { ProblemProgressService } = await import('../services/problemProgressService');
+      const { supabase } = await import('../lib/supabase');
+      
+      if (!supabase) return;
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return;
+      
+      console.log('🔄 Syncing with Supabase...');
+      const supabaseProgress = await ProblemProgressService.getUserProgress(user.id);
+      
+      // Update problems with Supabase data (optimized)
+      setProblems(currentProblems => {
+        let hasChanges = false;
+        const updatedProblems = currentProblems.map(problem => {
+          const progress = supabaseProgress.find(p => p.problem_id === problem.id);
+          if (progress) {
+            const newStatus = (progress.status as 'not-started' | 'attempted' | 'solved' | 'mastered') || problem.status;
+            const newBookmark = progress.is_bookmarked || false;
+            
+            if (newStatus !== problem.status || newBookmark !== problem.isBookmarked) {
+              hasChanges = true;
+              return { ...problem, status: newStatus, isBookmarked: newBookmark };
+            }
+          }
+          return problem;
+        });
+        
+        // Only update if there are actual changes
+        if (hasChanges) {
+          console.log('✅ Supabase sync completed with changes');
+          localStorage.setItem('last_supabase_sync', now.toString());
+          
+          // Update localStorage bookmark cache for immediate filtering
+          const bookmarkKey = 'dsa_problem_bookmarks';
+          const bookmarkCache: Record<string, boolean> = {};
+          
+          updatedProblems.forEach(problem => {
+            if (problem.isBookmarked) {
+              bookmarkCache[problem.id] = true;
+            }
+          });
+          
+          localStorage.setItem(bookmarkKey, JSON.stringify(bookmarkCache));
+          
+          return updatedProblems;
+        }
+        console.log('⏭️ No changes detected in Supabase data');
+        localStorage.setItem('last_supabase_sync', now.toString()); // Update sync time even if no changes
+        return currentProblems;
+      });
+    } catch (error) {
+      console.warn('Background sync with Supabase failed:', error);
     }
   }, []);
   
@@ -74,21 +158,42 @@ export default function Problems() {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   
-  // Lazy load problems on component mount
-  useEffect(() => {
-    const loadProblems = async () => {
-      try {
-        // Use setTimeout to prevent blocking the UI
-        await new Promise(resolve => setTimeout(resolve, 0));
-        const loadedProblems = loadProblemsWithProgress();
-        setProblems(loadedProblems);
-      } catch (error) {
-        console.error('Error loading problems:', error);
-      }
-    };
+  // Track if data has been loaded to prevent multiple fetches
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Manual refresh function
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
     
-    loadProblems();
-  }, [loadProblemsWithProgress]);
+    setIsRefreshing(true);
+    localStorage.removeItem('last_supabase_sync'); // Force fresh sync
+    
+    try {
+      await syncWithSupabase();
+    } catch (error) {
+      console.error('Manual refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [syncWithSupabase, isRefreshing]);
+  
+  // Fast initial load, then background sync (only once)
+  useEffect(() => {
+    if (isDataLoaded) return; // Prevent multiple loads
+    
+    // Immediate load from localStorage
+    const initialProblems = loadProblemsInitial();
+    setProblems(initialProblems);
+    setIsDataLoaded(true);
+    
+    // Background sync with Supabase (non-blocking, only once)
+    const syncTimer = setTimeout(() => {
+      syncWithSupabase();
+    }, 100);
+    
+    return () => clearTimeout(syncTimer);
+  }, []); // Empty dependency array - only run once
   
   // Debounced search effect
   useEffect(() => {
@@ -108,7 +213,7 @@ export default function Problems() {
     };
   }, [searchTerm]);
   
-  // Memoized derived data for better performance
+  // Memoized derived data for better performance (cached to prevent re-computation)
   const categories = useMemo(() => [
     'All',
     'Arrays',
@@ -133,7 +238,7 @@ export default function Problems() {
   const companies = useMemo(() => {
     if (problems.length === 0) return ['All'];
     return ['All', ...Array.from(new Set(problems.flatMap(p => p.companies))).sort()];
-  }, [problems]);
+  }, [problems.length]); // Only recompute when problem count changes
   const bookmarkOptions = useMemo(() => ['All', 'Bookmarked', 'Not Bookmarked'], []);
   const sortOptions = useMemo(() => [
     { value: 'default', label: 'Default Order' },

@@ -165,3 +165,73 @@ export function setCookie(
 export function deleteCookie(name: string, path: string = '/'): void {
   document.cookie = `${name}=; path=${path}; max-age=0; SameSite=Strict`;
 }
+
+/**
+ * Clear all application cookies used for authentication and user data
+ * This function removes all known cookies used throughout the DSA application
+ */
+export function clearAllAppCookies(): void {
+  try {
+    console.log('🧹 Clearing all application cookies...');
+    
+    // List of all known cookies used in the application
+    const cookiesToClear = [
+      // Enhanced auth persistence cookies
+      'dsa-user-id',
+      'dsa-auth-state',
+      
+      // Session cookies
+      'auth_session',
+      
+      // Legacy/alternative cookie names that might exist
+      'dsa_user_id',
+      'dsa_auth_state',
+      'user-id',
+      'auth-state',
+      'session',
+      'user_session',
+      
+      // Supabase related cookies (if any)
+      'sb-access-token',
+      'sb-refresh-token',
+      'supabase-auth-token',
+      
+      // Any other potential cookies
+      'dsa-session',
+      'dsa_session',
+      'authentication',
+      'user_data'
+    ];
+    
+    // Clear each cookie with different path variations
+    const paths = ['/', '/auth', '/login', '/dashboard'];
+    
+    cookiesToClear.forEach(cookieName => {
+      paths.forEach(path => {
+        // Clear with different SameSite policies to ensure complete removal
+        document.cookie = `${cookieName}=; path=${path}; max-age=0; SameSite=Strict`;
+        document.cookie = `${cookieName}=; path=${path}; max-age=0; SameSite=Lax`;
+        document.cookie = `${cookieName}=; path=${path}; max-age=0; SameSite=None; Secure`;
+        
+        // Also clear without specifying SameSite for older browsers
+        document.cookie = `${cookieName}=; path=${path}; max-age=0`;
+        
+        // Clear with expires date in the past as additional fallback
+        document.cookie = `${cookieName}=; path=${path}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+      });
+    });
+    
+    // Clear cookies for different domains/subdomains if applicable
+    const currentDomain = window.location.hostname;
+    if (currentDomain !== 'localhost' && currentDomain !== '127.0.0.1') {
+      cookiesToClear.forEach(cookieName => {
+        document.cookie = `${cookieName}=; domain=${currentDomain}; path=/; max-age=0`;
+        document.cookie = `${cookieName}=; domain=.${currentDomain}; path=/; max-age=0`;
+      });
+    }
+    
+    console.log('✅ All application cookies cleared successfully');
+  } catch (error) {
+    console.error('❌ Error clearing application cookies:', error);
+  }
+}

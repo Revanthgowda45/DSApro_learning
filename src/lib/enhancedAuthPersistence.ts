@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import { User } from '../services/supabaseAuthService';
 import { supabaseHealthManager } from '../utils/supabaseHealthManager';
 import { shouldUseOfflineMode } from '../utils/productionOptimizer';
+import { clearAllAppCookies } from './storageUtils';
 
 // Storage keys for multi-layer persistence
 const SESSION_STORAGE_KEY = 'dsa-session-active';
@@ -119,20 +120,36 @@ export const storeUserData = (user: User): void => {
  */
 export const clearAuthPersistence = (): void => {
   try {
-    // Clear localStorage
+    console.log('🧹 Starting comprehensive logout cleanup...');
+    
+    // Clear localStorage - all auth related data
     localStorage.removeItem(USER_DATA_STORAGE_KEY);
     localStorage.removeItem(SESSION_TIMESTAMP_KEY);
     localStorage.removeItem('dsa_offline_mode');
     localStorage.removeItem('dsa_production_optimized');
     
+    // Clear additional localStorage items that might contain user data
+    localStorage.removeItem('dsa_user');
+    localStorage.removeItem('dsa-user-data');
+    localStorage.removeItem('user_preferences');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('session_data');
+    
     // Clear sessionStorage
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    sessionStorage.removeItem('dsa-session');
+    sessionStorage.removeItem('user_session');
+    sessionStorage.removeItem('auth_session');
     
-    // Clear cookies
+    // Clear all application cookies comprehensively
+    clearAllAppCookies();
+    
+    // Also clear individual cookies as fallback
     deleteCookie(USER_ID_COOKIE_KEY);
     deleteCookie(AUTH_STATE_COOKIE_KEY);
+    deleteCookie('auth_session');
     
-    console.log('🧹 All authentication persistence data cleared');
+    console.log('✅ Comprehensive logout cleanup completed - all cookies and storage cleared');
   } catch (error) {
     console.error('❌ Error clearing auth persistence:', error);
   }

@@ -1,5 +1,5 @@
 import { useAuth } from '../context/AuthContext';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { 
   Target,
@@ -19,14 +19,39 @@ import { useNotifications } from '../hooks/useNotifications';
 export default function Dashboard() {
   const { user } = useAuth();
 
-  const [todayStats, setTodayStats] = useState({
-    problemsSolved: 0,
-    timeSpent: 0,
-    confidenceGained: 0
-  });
   const { metrics: progressMetrics, loading, error, refresh } = useOptimizedAnalytics();
   const { stats: quickStats } = useQuickStats();
   const { checkDailyNotifications } = useNotifications();
+  
+  // Today's session data state
+  const [todayStats, setTodayStats] = useState({
+    timeSpent: 0,
+    problemsSolved: 0
+  });
+  
+  // Consolidated stats from optimized analytics and today's data
+  const dashboardStats = {
+    currentStreak: progressMetrics?.currentStreak || 0,
+    timeToday: todayStats.timeSpent,
+    confidenceLevel: progressMetrics?.confidenceLevel || 0,
+    problemsToday: todayStats.problemsSolved,
+    dailyTimeLimit: user?.daily_time_limit || 120
+  };
+  
+  // Load today's specific data
+  const loadTodayStats = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const todaySession = await UserSessionService.getTodaySession(user.id);
+      setTodayStats({
+        timeSpent: todaySession?.time_spent || 0,
+        problemsSolved: todaySession?.problems_solved || 0
+      });
+    } catch (error) {
+      console.error('❌ Error loading today stats:', error);
+    }
+  };
   
   // Debug logging to understand what's happening
   console.log('🔍 Dashboard Debug:', {
@@ -35,48 +60,20 @@ export default function Dashboard() {
     error,
     progressMetrics: progressMetrics ? 'available' : 'null',
     quickStats: quickStats ? 'available' : 'null',
-    todayStats
+    todayStats,
+    dashboardStats
   });
 
   // Listen for analytics updates
   const refreshTrigger = useAnalyticsRefresh();
 
-  // Load real analytics data from Supabase
-  const loadRealAnalytics = async () => {
-    if (!user?.id) {
-      return;
-    }
-
-    try {
-      console.log('📊 Loading Dashboard analytics from Supabase for user:', user.id);
-      
-      // Get today's session data from Supabase
-      const todaySession = await UserSessionService.getTodaySession(user.id);
-      
-      const todayProblems = todaySession?.problems_solved || 0;
-      const todayTime = todaySession?.time_spent || 0;
-      
-      // Calculate confidence gained today (simplified)
-      const confidenceGained = todayProblems > 0 ? Math.min(todayProblems * 2, 5) : 0;
-      
-      setTodayStats({
-        problemsSolved: todayProblems,
-        timeSpent: todayTime,
-        confidenceGained
-      });
-      
-      console.log('✅ Dashboard analytics loaded:', { todayStats: { todayProblems, todayTime, confidenceGained } });
-      
-    } catch (error) {
-      console.error('❌ Error loading dashboard analytics:', error);
-    }
-  };
-
-  // Load analytics on component mount and when user changes
+  // Load data when user is available
   useEffect(() => {
     if (user?.id) {
-      console.log('🔄 User detected, loading analytics for:', user.id);
-      loadRealAnalytics();
+      console.log('🔄 User detected, loading data for:', user.id);
+      
+      // Load today's specific stats
+      loadTodayStats();
       
       // Check for daily notifications after a delay
       const notificationTimer = setTimeout(() => {
@@ -86,36 +83,24 @@ export default function Dashboard() {
       return () => clearTimeout(notificationTimer);
     }
   }, [user?.id, checkDailyNotifications]);
-
-  // Additional effect to handle page reload scenarios
-  useEffect(() => {
-    // Small delay to ensure user is fully restored from localStorage
-    const timer = setTimeout(() => {
-      if (user?.id && todayStats.problemsSolved === 0) {
-        console.log('🔄 Page reload detected, re-fetching data for:', user.id);
-        loadRealAnalytics();
-      }
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [user]);
   
   // Refresh when analytics are updated
   useEffect(() => {
     if (refreshTrigger > 0 && user?.id) {
       console.log('🔄 Dashboard refresh triggered, updating all analytics...');
-      loadRealAnalytics();
-      refresh(); // Also refresh optimized analytics
+      refresh(); // Refresh optimized analytics
+      loadTodayStats(); // Also refresh today's stats
     }
   }, [refreshTrigger, user?.id, refresh]);
 
   // Listen for learning preferences updates
   useEffect(() => {
-    const handlePreferencesUpdate = (event: CustomEvent) => {
+    const handlePreferencesUpdate = () => {
       console.log('📊 Learning preferences updated, refreshing dashboard...');
       // Force a re-render to show updated time limit
       if (user?.id) {
-        loadRealAnalytics();
+        refresh(); // Use single refresh method
+        loadTodayStats(); // Also refresh today's stats
       }
     };
 
@@ -200,35 +185,35 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
           title="Current Streak"
-          value={`${displayMetrics.currentStreak} days`}
+          value={loading ? "--" : `${dashboardStats.currentStreak} days`}
           icon={Flame}
           color="text-orange-600"
           bgColor="bg-orange-100"
-          trend={displayMetrics.currentStreak > 0 ? `${displayMetrics.currentStreak > 1 ? '+1 from yesterday' : 'Started today!'}` : 'Start your streak today!'}
+          trend={dashboardStats.currentStreak > 0 ? "Keep it going! 🔥" : "Start your streak today!"}
         />
         <StatsCard
           title="Problems Solved"
-          value={displayMetrics.solvedProblems.toString()}
+          value={loading ? "--" : (progressMetrics?.solvedProblems || 0).toString()}
           icon={Target}
           color="text-green-600"
           bgColor="bg-green-100"
-          trend={`${todayStats.problemsSolved} today`}
+          trend={`${dashboardStats.problemsToday} today`}
         />
         <StatsCard
           title="Time Today"
-          value={`${todayStats.timeSpent}/${user?.daily_time_limit || 120}min`}
+          value={loading ? "--/--min" : `${dashboardStats.timeToday}/${dashboardStats.dailyTimeLimit}min`}
           icon={Clock}
           color="text-blue-600"
           bgColor="bg-blue-100"
-          trend={`${Math.round((todayStats.timeSpent / (user?.daily_time_limit || 120)) * 100)}% of goal`}
+          trend={`${Math.round((dashboardStats.timeToday / dashboardStats.dailyTimeLimit) * 100)}% of goal`}
         />
         <StatsCard
           title="Confidence Level"
-          value={`${Math.round(displayMetrics.confidenceLevel)}/10`}
+          value={loading ? "--/10" : `${Math.round(dashboardStats.confidenceLevel)}/10`}
           icon={Star}
           color="text-purple-600"
           bgColor="bg-purple-100"
-          trend={todayStats.confidenceGained > 0 ? `+${todayStats.confidenceGained} today` : 'Solve problems to gain confidence'}
+          trend={dashboardStats.confidenceLevel >= 7 ? "High confidence! 💪" : "Keep practicing to build confidence"}
         />
       </div>
 

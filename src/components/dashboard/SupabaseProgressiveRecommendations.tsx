@@ -815,6 +815,7 @@ export default function SupabaseProgressiveRecommendations() {
   const [dailyRecommendation, setDailyRecommendation] = useState<DailyRecommendation | null>(null);
   const [motivationalMessage, setMotivationalMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [completedProblems, setCompletedProblems] = useState<Set<string>>(new Set());
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
@@ -986,7 +987,7 @@ export default function SupabaseProgressiveRecommendations() {
         if (supabase) {
           const profileResponse = await supabase
             .from('profiles')
-            .select('id, email, full_name')
+            .select('id, full_name')
             .eq('id', user.id)
             .single();
             
@@ -1148,52 +1149,107 @@ export default function SupabaseProgressiveRecommendations() {
         available_recommendations: dailyRec?.problems.length || 0
       });
       
-      // Process advanced AI analytics with real session data
+      // Process advanced AI analytics in background (non-blocking)
       const userSessions = await UserSessionService.getUserSessions(user.id, undefined, undefined);
-      await processAdvancedAI(problemProgress, userSessions);
+      
+      // Use setTimeout to make AI processing non-blocking
+      setTimeout(() => {
+        processAdvancedAI(problemProgress, userSessions);
+      }, 100); // Small delay to not block initial render
       
     } catch (error) {
       console.error('❌ Error loading Supabase data, falling back to localStorage:', error);
       loadLocalData();
     } finally {
       setIsLoading(false);
+      setIsInitialLoad(false);
     }
   };
   
-  // Advanced AI Processing Function
+  // Advanced AI Processing Function (optimized with caching and chunking)
   const processAdvancedAI = useCallback(async (problemProgress: any[], userSessions: any[]) => {
     if (!problemProgress.length && !userSessions.length) return;
+    
+    // Check cache first (5 minute cache)
+    const cacheKey = `ai_analytics_${user?.id}`;
+    const cached = localStorage.getItem(cacheKey);
+    const now = Date.now();
+    
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (now - timestamp < 300000) { // 5 minutes
+        console.log('📦 Using cached AI analytics');
+        setLearningPattern(data.learningPattern);
+        setCognitiveLoad(data.cognitiveLoad);
+        setPredictiveAnalytics(data.predictiveAnalytics);
+        setAdaptiveDifficulty(data.adaptiveDifficulty);
+        setMlInsights(data.mlInsights);
+        return;
+      }
+    }
     
     setAiProcessing(true);
     
     try {
-      console.log('🧠 Processing advanced AI analytics...');
+      console.log('🧠 Processing advanced AI analytics (background)...');
       
-      // 1. Analyze Learning Pattern
-      const pattern = AdvancedAIEngine.analyzeUserLearningPattern(problemProgress, userSessions);
+      // Process in chunks with delays to prevent blocking
+      const processChunk = (fn: () => any, delay: number) => {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve(fn());
+          }, delay);
+        });
+      };
+      
+      // 1. Analyze Learning Pattern (chunk 1)
+      const pattern = await processChunk(() => 
+        AdvancedAIEngine.analyzeUserLearningPattern(problemProgress, userSessions), 0
+      ) as LearningPattern;
       setLearningPattern(pattern);
       
-      // 2. Assess Cognitive Load
-      const recentSessions = userSessions.slice(-7); // Last 7 sessions
-      const todayTimeSpent = recentSessions.reduce((sum, s) => sum + (s.time_spent || 0), 0) / 60; // Convert to minutes
-      const cognitive = AdvancedAIEngine.assessCognitiveLoad(recentSessions, userProgress.currentStreak, todayTimeSpent);
+      // 2. Assess Cognitive Load (chunk 2)
+      const recentSessions = userSessions.slice(-7);
+      const todayTimeSpent = recentSessions.reduce((sum, s) => sum + (s.time_spent || 0), 0) / 60;
+      const cognitive = await processChunk(() => 
+        AdvancedAIEngine.assessCognitiveLoad(recentSessions, userProgress.currentStreak, todayTimeSpent), 50
+      ) as CognitiveLoadMetrics;
       setCognitiveLoad(cognitive);
       
-      // 3. Generate Predictive Analytics
-      const analytics = AdvancedAIEngine.generatePredictiveAnalytics(userProgress, pattern);
+      // 3. Generate Predictive Analytics (chunk 3)
+      const analytics = await processChunk(() => 
+        AdvancedAIEngine.generatePredictiveAnalytics(userProgress, pattern), 100
+      ) as PredictiveAnalytics;
       setPredictiveAnalytics(analytics);
       
-      // 4. Create Adaptive Difficulty Engine
-      const difficulty = AdvancedAIEngine.createAdaptiveDifficultyEngine(userProgress, pattern);
+      // 4. Create Adaptive Difficulty Engine (chunk 4)
+      const difficulty = await processChunk(() => 
+        AdvancedAIEngine.createAdaptiveDifficultyEngine(userProgress, pattern), 150
+      ) as AdaptiveDifficultyEngine;
       setAdaptiveDifficulty(difficulty);
       
-      // 5. Generate ML Insights
-      const insights = AdvancedAIEngine.generateMLInsights(userProgress, pattern);
+      // 5. Generate ML Insights (chunk 5)
+      const insights = await processChunk(() => 
+        AdvancedAIEngine.generateMLInsights(userProgress, pattern), 200
+      ) as MachineLearningInsights;
       setMlInsights(insights);
+      
+      // Cache the results
+      const cacheData = {
+        data: {
+          learningPattern: pattern,
+          cognitiveLoad: cognitive,
+          predictiveAnalytics: analytics,
+          adaptiveDifficulty: difficulty,
+          mlInsights: insights
+        },
+        timestamp: now
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       
       // Smart recommendations will be generated manually when user clicks the button
       
-      console.log('✅ Advanced AI processing complete:', {
+      console.log('✅ Advanced AI processing complete (cached):', {
         learningPattern: pattern,
         cognitiveLoad: cognitive,
         predictiveAnalytics: analytics,
@@ -1206,7 +1262,7 @@ export default function SupabaseProgressiveRecommendations() {
     } finally {
       setAiProcessing(false);
     }
-  }, [userProgress, dailyRecommendation]);
+  }, [userProgress, dailyRecommendation, user]);
 
   // Generate AI Recommendations
   const generateAiRecommendations = useCallback(async () => {
@@ -1351,15 +1407,76 @@ export default function SupabaseProgressiveRecommendations() {
     }
   };
 
+  // Fast loading skeleton for better perceived performance
+  if (isInitialLoad) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="space-y-4">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="w-48 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            </div>
+            <div className="w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          </div>
+          
+          {/* User preferences skeleton */}
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-5 h-5 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+                <div className="w-32 h-4 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+              </div>
+              <div className="flex space-x-2">
+                <div className="w-16 h-6 bg-gray-200 dark:bg-gray-600 rounded-full animate-pulse"></div>
+                <div className="w-20 h-6 bg-gray-200 dark:bg-gray-600 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Problems skeleton */}
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 space-y-2">
+                    <div className="w-3/4 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    <div className="flex space-x-2">
+                      <div className="w-16 h-5 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+                      <div className="w-20 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <div className="w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                    <div className="w-16 h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Progress bar skeleton */}
+          <div className="border-t pt-4">
+            <div className="flex justify-between mb-2">
+              <div className="w-24 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="w-16 h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            </div>
+            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center justify-center py-8">
-          <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400">
-            <Brain className="h-5 w-5 animate-pulse" />
-            <span className="text-sm font-medium">
-              {user && isOnline ? 'Loading real-time recommendations...' : 'Loading recommendations...'}
-            </span>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="flex items-center justify-center py-8 sm:py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base">Loading your personalized recommendations...</p>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Analyzing your progress and preferences</p>
           </div>
         </div>
       </div>

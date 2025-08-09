@@ -182,6 +182,19 @@ export default function ProblemCard({
       // Update local state immediately for better UX
       setIsBookmarked(newBookmarkState);
       
+      // Save to localStorage for immediate filter availability
+      const bookmarkKey = 'dsa_problem_bookmarks';
+      const existingBookmarks = localStorage.getItem(bookmarkKey);
+      const problemBookmarks: Record<string, boolean> = existingBookmarks ? JSON.parse(existingBookmarks) : {};
+      
+      if (newBookmarkState) {
+        problemBookmarks[problem.id] = true;
+      } else {
+        delete problemBookmarks[problem.id];
+      }
+      
+      localStorage.setItem(bookmarkKey, JSON.stringify(problemBookmarks));
+      
       // Save to Supabase
       await ProblemProgressService.updateProblemStatus(
         user.id,
@@ -200,6 +213,19 @@ export default function ProblemCard({
       console.error('❌ Failed to update bookmark:', error);
       // Revert local state on error
       setIsBookmarked(!newBookmarkState);
+      
+      // Revert localStorage on error
+      const bookmarkKey = 'dsa_problem_bookmarks';
+      const existingBookmarks = localStorage.getItem(bookmarkKey);
+      const problemBookmarks: Record<string, boolean> = existingBookmarks ? JSON.parse(existingBookmarks) : {};
+      
+      if (!newBookmarkState) {
+        problemBookmarks[problem.id] = true;
+      } else {
+        delete problemBookmarks[problem.id];
+      }
+      
+      localStorage.setItem(bookmarkKey, JSON.stringify(problemBookmarks));
     } finally {
       setIsBookmarkLoading(false);
     }

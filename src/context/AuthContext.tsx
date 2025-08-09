@@ -308,15 +308,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
+      console.log('🔄 Starting logout process...');
+      
+      // First, logout from Supabase
       await SupabaseAuthService.logout();
+      
+      // Clear all authentication persistence (localStorage, sessionStorage, cookies)
       clearAuthPersistence();
+      
+      // Clear React state
       setUser(null);
-      console.log('✅ Logout successful');
+      
+      // Additional cleanup - clear any remaining browser storage
+      try {
+        // Clear any IndexedDB data if present
+        if ('indexedDB' in window) {
+          // This is a non-blocking cleanup attempt
+          setTimeout(() => {
+            try {
+              indexedDB.deleteDatabase('dsa-app-data');
+              indexedDB.deleteDatabase('supabase-auth');
+            } catch (e) {
+              // Ignore errors - this is just cleanup
+            }
+          }, 100);
+        }
+        
+        // Clear service worker cache if present
+        if ('caches' in window) {
+          setTimeout(async () => {
+            try {
+              const cacheNames = await caches.keys();
+              await Promise.all(
+                cacheNames.map(cacheName => caches.delete(cacheName))
+              );
+            } catch (e) {
+              // Ignore errors - this is just cleanup
+            }
+          }, 100);
+        }
+      } catch (cleanupError) {
+        // Ignore cleanup errors - they shouldn't prevent logout
+        console.warn('⚠️ Additional cleanup warning:', cleanupError);
+      }
+      
+      console.log('✅ Complete logout successful - all data cleared');
     } catch (error) {
       console.error('❌ Logout failed:', error);
-      // Clear local state anyway
+      // Clear local state anyway - logout should always succeed locally
       clearAuthPersistence();
       setUser(null);
+      console.log('✅ Local logout completed despite Supabase error');
     }
   };
 

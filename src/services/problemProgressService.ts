@@ -6,9 +6,19 @@ type ProblemProgressInsert = Inserts<'problem_progress'>
 type ProblemProgressUpdate = Updates<'problem_progress'>
 
 export class ProblemProgressService {
+  // Helper method to check if Supabase is available and return it
+  private static getSupabaseClient() {
+    if (!supabase) {
+      throw new Error('Supabase is not configured. Please check your environment variables.')
+    }
+    return supabase
+  }
+
   // Get user's problem progress with real-time subscription
   static async getUserProgress(userId: string): Promise<ProblemProgress[]> {
-    const { data, error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data, error } = await supabaseClient
       .from('problem_progress')
       .select('*')
       .eq('user_id', userId)
@@ -24,7 +34,9 @@ export class ProblemProgressService {
 
   // Get progress for a specific problem
   static async getProblemProgress(userId: string, problemId: string): Promise<ProblemProgress | null> {
-    const { data, error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data, error } = await supabaseClient
       .from('problem_progress')
       .select('*')
       .eq('user_id', userId)
@@ -58,7 +70,9 @@ export class ProblemProgressService {
       ...updates
     }
 
-    const { data, error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data, error } = await supabaseClient
       .from('problem_progress')
       .upsert(updateData, {
         onConflict: 'user_id,problem_id'
@@ -79,7 +93,9 @@ export class ProblemProgressService {
 
   // Delete problem progress (reset to not-started)
   static async deleteProblemProgress(userId: string, problemId: string): Promise<void> {
-    const { error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { error } = await supabaseClient
       .from('problem_progress')
       .delete()
       .eq('user_id', userId)
@@ -106,7 +122,9 @@ export class ProblemProgressService {
       ...updates
     }))
 
-    const { data, error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data, error } = await supabaseClient
       .from('problem_progress')
       .upsert(updateData, {
         onConflict: 'user_id,problem_id'
@@ -125,7 +143,9 @@ export class ProblemProgressService {
 
   // Real-time subscription for problem progress changes
   static subscribeToProgress(userId: string, callback: (payload: any) => void) {
-    return supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    return supabaseClient
       .channel(`problem_progress:${userId}`)
       .on(
         'postgres_changes',
@@ -169,7 +189,7 @@ export class ProblemProgressService {
   }
 
   // Calculate topic-wise progress
-  private static calculateTopicProgress(progress: ProblemProgress[]) {
+  private static calculateTopicProgress(_progress: ProblemProgress[]) {
     // This would need to be enhanced with actual topic mapping from dsa.json
     const topicStats: Record<string, { total: number; solved: number }> = {}
     
@@ -183,7 +203,9 @@ export class ProblemProgressService {
       const stats = await this.getUserStats(userId)
       
       // Update AI insights with latest stats
-      await supabase
+      const supabaseClient = this.getSupabaseClient()
+      
+      await supabaseClient
         .from('ai_insights')
         .upsert({
           user_id: userId,
@@ -209,7 +231,9 @@ export class ProblemProgressService {
   private static async updateTodaySession(userId: string, stats: any) {
     const today = new Date().toISOString().split('T')[0]
     
-    const { data: existingSession } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data: existingSession } = await supabaseClient
       .from('user_sessions')
       .select('*')
       .eq('user_id', userId)
@@ -226,12 +250,12 @@ export class ProblemProgressService {
     }
     
     if (existingSession) {
-      await supabase
+      await supabaseClient
         .from('user_sessions')
         .update(sessionData)
         .eq('id', existingSession.id)
     } else {
-      await supabase
+      await supabaseClient
         .from('user_sessions')
         .insert(sessionData)
     }
@@ -239,7 +263,9 @@ export class ProblemProgressService {
 
   // Calculate streak from session data
   private static async calculateStreak(userId: string): Promise<number> {
-    const { data } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data } = await supabaseClient
       .from('user_sessions')
       .select('session_date, problems_solved')
       .eq('user_id', userId)
@@ -274,7 +300,9 @@ export class ProblemProgressService {
 
   // Get recent activity
   static async getRecentActivity(userId: string, limit: number = 10): Promise<ProblemProgress[]> {
-    const { data, error } = await supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    const { data, error } = await supabaseClient
       .from('problem_progress')
       .select('*')
       .eq('user_id', userId)
@@ -300,7 +328,9 @@ export class ProblemProgressService {
       minRating?: number
     }
   ): Promise<ProblemProgress[]> {
-    let query = supabase
+    const supabaseClient = this.getSupabaseClient()
+    
+    let query = supabaseClient
       .from('problem_progress')
       .select('*')
       .eq('user_id', userId)

@@ -20,21 +20,44 @@ const isSupabaseAvailable = () => {
   }
 };
 
-// Connection health check utility
+// Enhanced Connection health check utility
 class ConnectionManager {
   private static isHealthy = true;
   private static lastHealthCheck = 0;
   private static readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
+  private static readonly RECOVERY_INTERVAL = 60000; // 1 minute recovery time
   private static supabaseDisabled = false;
+  private static lastFailureTime = 0;
+  private static consecutiveFailures = 0;
+  private static readonly MAX_CONSECUTIVE_FAILURES = 3;
   
   static async checkConnection(): Promise<boolean> {
     // Quick check if Supabase is available
-    if (!isSupabaseAvailable() || this.supabaseDisabled) {
-      console.log('📱 Supabase not available, using localStorage fallback');
+    if (!isSupabaseAvailable()) {
+      console.log('📱 Supabase not configured, using localStorage fallback');
       return false;
     }
-    
+
+    // Check if Supabase client is available
+    if (!supabase) {
+      console.warn('⚠️ Supabase client not configured - cannot check connection');
+      return false;
+    }
+
     const now = Date.now();
+    
+    // Recovery mechanism: Re-enable Supabase after recovery interval
+    if (this.supabaseDisabled && (now - this.lastFailureTime) > this.RECOVERY_INTERVAL) {
+      console.log('🔄 Attempting to recover Supabase connection...');
+      this.supabaseDisabled = false;
+      this.consecutiveFailures = 0;
+      this.isHealthy = false; // Force a fresh health check
+    }
+    
+    // If disabled and not ready for recovery, return false
+    if (this.supabaseDisabled) {
+      return false;
+    }
     
     // Skip if recently checked and healthy
     if (this.isHealthy && (now - this.lastHealthCheck) < this.HEALTH_CHECK_INTERVAL) {
@@ -44,59 +67,99 @@ class ConnectionManager {
     try {
       console.log('🔍 Checking Supabase connection health...');
       
-      // Simple health check with shorter timeout
+      // Enhanced health check with longer timeout for better reliability
       const healthPromise = supabase.from('profiles').select('id').limit(1);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Health check timeout')), 3000) // Reduced to 3 seconds
+        setTimeout(() => reject(new Error('Health check timeout')), 8000) // Increased to 8 seconds
       );
       
       await Promise.race([healthPromise, timeoutPromise]);
       
       this.isHealthy = true;
       this.lastHealthCheck = now;
+      this.consecutiveFailures = 0; // Reset failure count on success
       console.log('✅ Supabase connection healthy');
       return true;
     } catch (error) {
-      console.warn('⚠️ Supabase connection unhealthy, disabling for this session:', error);
+      console.warn('⚠️ Supabase connection check failed:', error);
       this.isHealthy = false;
-      this.supabaseDisabled = true; // Disable for the rest of the session
       this.lastHealthCheck = now;
+      this.consecutiveFailures++;
+      
+      // Only disable after multiple consecutive failures
+      if (this.consecutiveFailures >= this.MAX_CONSECUTIVE_FAILURES) {
+        console.warn(`❌ ${this.MAX_CONSECUTIVE_FAILURES} consecutive failures, temporarily disabling Supabase`);
+        this.supabaseDisabled = true;
+        this.lastFailureTime = now;
+      }
+      
       return false;
     }
   }
   
-  static async withRetry<T>(operation: () => Promise<T>, retries = 1): Promise<T | null> {
-    // If Supabase is disabled, return null immediately
-    if (!isSupabaseAvailable() || this.supabaseDisabled) {
-      console.log('📱 Supabase disabled, skipping operation');
+  static async withRetry<T>(operation: () => Promise<T>, retries = 2): Promise<T | null> {
+    // If Supabase is not available, return null immediately
+    if (!isSupabaseAvailable()) {
+      console.log('📱 Supabase not configured, skipping operation');
       return null;
     }
     
     for (let i = 0; i <= retries; i++) {
       try {
-        // Check connection health before operation
-        if (!(await this.checkConnection())) {
-          console.log('📱 Connection unhealthy, returning null');
+        // Check connection health before operation (with recovery mechanism)
+        const isConnected = await this.checkConnection();
+        if (!isConnected) {
+          console.log('📱 Connection unavailable, using fallback');
           return null;
         }
         
-        const result = await operation();
+        // Add operation timeout to prevent hanging
+        const operationPromise = operation();
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Operation timeout')), 10000) // 10 second timeout
+        );
+        
+        const result = await Promise.race([operationPromise, timeoutPromise]);
+        
+        // Reset failure count on successful operation
+        this.consecutiveFailures = Math.max(0, this.consecutiveFailures - 1);
         return result;
       } catch (error) {
         console.warn(`⚠️ Operation attempt ${i + 1}/${retries + 1} failed:`, error);
         
+        // Don't immediately disable on single failures
         if (i === retries) {
-          console.log('❌ All retry attempts failed, disabling Supabase for session');
-          this.supabaseDisabled = true;
+          console.log('❌ All retry attempts failed, using fallback');
           return null;
         }
         
-        // Wait before retry with shorter backoff
+        // Progressive backoff: 1s, 2s, 3s
         await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
       }
     }
     
     return null;
+  }
+
+  // Manual recovery method for debugging
+  static forceRecovery(): void {
+    console.log('🔄 Forcing Supabase connection recovery...');
+    this.supabaseDisabled = false;
+    this.consecutiveFailures = 0;
+    this.isHealthy = false;
+    this.lastHealthCheck = 0;
+  }
+
+  // Get connection status for debugging
+  static getStatus() {
+    return {
+      isHealthy: this.isHealthy,
+      isDisabled: this.supabaseDisabled,
+      consecutiveFailures: this.consecutiveFailures,
+      lastHealthCheck: new Date(this.lastHealthCheck).toISOString(),
+      lastFailureTime: this.lastFailureTime ? new Date(this.lastFailureTime).toISOString() : null,
+      supabaseConfigured: isSupabaseAvailable()
+    };
   }
 }
 
@@ -110,8 +173,16 @@ export class UserSessionService {
     startDate?: string,
     endDate?: string
   ): Promise<UserSession[]> {
+    console.log('🔍 Starting getUserSessions for user:', userId, { startDate, endDate });
+    
     const result = await ConnectionManager.withRetry(async () => {
       console.log('🔍 Fetching user sessions for user:', userId, { startDate, endDate })
+      
+      // Check if Supabase is available
+      if (!supabase) {
+        console.warn('⚠️ Supabase not configured - cannot fetch user sessions');
+        return [];
+      }
       
       let query = supabase
         .from('user_sessions')
@@ -134,24 +205,44 @@ export class UserSessionService {
         throw error
       }
       
-      console.log('✅ Successfully fetched', data?.length || 0, 'user sessions')
-      return data || []
-    });
+      // Validate data integrity
+      const validData = (data || []).filter(session => {
+        if (!session.session_date) {
+          console.warn('⚠️ Filtering out session with missing session_date:', session);
+          return false;
+        }
+        return true;
+      });
+      
+      console.log('✅ Successfully fetched', validData.length, 'valid user sessions (filtered from', data?.length || 0, 'total)');
+      return validData;
+    }, 3); // Increased retries for critical data fetching
     
     // If Supabase failed, use localStorage fallback
     if (result === null) {
       console.log('📱 Using localStorage fallback for user sessions')
-      return LocalStorageAnalytics.getUserSessions()
+      const fallbackData = LocalStorageAnalytics.getUserSessions();
+      console.log('📱 Fallback returned', fallbackData.length, 'sessions');
+      return fallbackData;
     }
     
+    console.log('✅ Returning', result.length, 'user sessions');
     return result || []
   }
 
   // Get today's session
   static async getTodaySession(userId: string): Promise<UserSession | null> {
+    const today = new Date().toISOString().split('T')[0];
+    console.log('🔍 Starting getTodaySession for user:', userId, 'date:', today);
+    
     const result = await ConnectionManager.withRetry(async () => {
-      const today = new Date().toISOString().split('T')[0]
       console.log('🔍 Fetching today session for user:', userId, 'date:', today)
+      
+      // Check if Supabase is available
+      if (!supabase) {
+        console.warn('⚠️ Supabase not configured - cannot fetch today session');
+        return null;
+      }
       
       // First try without .single() to avoid 406 errors
       const { data, error } = await supabase
@@ -192,6 +283,12 @@ export class UserSessionService {
     try {
       const today = new Date().toISOString().split('T')[0]
       console.log('📝 Updating today session for user:', userId, 'date:', today, 'updates:', updates)
+      
+      // Check if Supabase is available
+      if (!supabase) {
+        console.warn('⚠️ Supabase not configured - cannot update today session');
+        return null;
+      }
       
       const sessionData: UserSessionInsert = {
         user_id: userId,
@@ -466,18 +563,13 @@ export class UserSessionService {
   static async getSessionHeatmap(userId: string, year?: number): Promise<Record<string, number>> {
     const currentYear = year || new Date().getFullYear()
     const startDate = `${currentYear}-01-01`
-    const endDate = `${currentYear}-12-31`
-    
-    // Calculate number of days in the year
-    const isLeapYear = (currentYear % 4 === 0 && currentYear % 100 !== 0) || (currentYear % 400 === 0)
-    const daysInYear = isLeapYear ? 366 : 365
-    
+    const endDate = `${currentYear}-12-31`    
     const sessions = await this.getUserSessions(userId, startDate, endDate)
     
     // If no sessions returned (Supabase failed), use localStorage fallback
     if (!sessions || sessions.length === 0) {
-      console.log('📱 No Supabase sessions, using localStorage analytics')
-      return LocalStorageAnalytics.getSessionAnalytics(daysInYear)
+      console.log('📱 No Supabase sessions, using localStorage fallback for heatmap')
+      return LocalStorageAnalytics.getSessionHeatmap(currentYear)
     }
     
     const heatmapData: Record<string, number> = {}
@@ -504,6 +596,12 @@ export class UserSessionService {
 
   // Real-time subscription for session updates
   static subscribeToSessions(userId: string, callback: (payload: any) => void) {
+    // Check if Supabase is available
+    if (!supabase) {
+      console.warn('⚠️ Supabase not configured - cannot subscribe to sessions');
+      return null;
+    }
+    
     return supabase
       .channel(`user_sessions:${userId}`)
       .on(
@@ -521,6 +619,12 @@ export class UserSessionService {
 
   // Bulk create sessions (for data migration)
   static async bulkCreateSessions(sessions: UserSessionInsert[]): Promise<UserSession[]> {
+    // Check if Supabase is available
+    if (!supabase) {
+      console.warn('⚠️ Supabase not configured - cannot bulk create sessions');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('user_sessions')
       .insert(sessions)

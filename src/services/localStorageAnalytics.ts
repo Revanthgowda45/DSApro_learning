@@ -80,6 +80,28 @@ export class LocalStorageAnalytics {
     };
   }
 
+  // Get session heatmap data for calendar visualization
+  static getSessionHeatmap(year: number): Record<string, number> {
+    const sessions = this.getUserSessions();
+    const heatmapData: Record<string, number> = {};
+    
+    // Filter sessions for the specified year
+    const yearSessions = sessions.filter(session => {
+      if (!session.date) return false;
+      const sessionYear = new Date(session.date).getFullYear();
+      return sessionYear === year;
+    });
+    
+    // Build heatmap data: date -> problems solved count
+    yearSessions.forEach(session => {
+      if (session.date && session.problemsSolved) {
+        heatmapData[session.date] = session.problemsSolved;
+      }
+    });
+    
+    return heatmapData;
+  }
+
   // Get progress metrics for dashboard
   static getProgressMetrics() {
     const solvedCount = this.getSolvedProblemsCount();

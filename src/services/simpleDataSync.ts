@@ -140,6 +140,12 @@ export class SimpleDataSync {
   static async migrateLocalToSupabase(userId: string): Promise<void> {
     console.log('🔄 Migrating local data to Supabase...');
     
+    // Check if Supabase is available
+    if (!supabase) {
+      console.warn('⚠️ Supabase not configured - cannot migrate local data');
+      return;
+    }
+    
     try {
       // Migrate problem statuses
       const problemStatuses = localStorage.getItem('dsa_problem_statuses');
