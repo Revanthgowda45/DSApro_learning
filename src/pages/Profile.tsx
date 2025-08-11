@@ -234,19 +234,19 @@ export default function Profile() {
                     </>
                   ) : (
                     <div className="flex items-center space-x-3">
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm text-sm font-medium"
-                    >
-                      <Edit className="h-4 w-4" />
-                      <span>Edit</span>
-                    </button>
-                    <Link to="/settings" className="flex items-center">
-                      <button className="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors shadow-sm">
-                        <Settings className="h-5 w-5" />
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm"
+                        title="Edit Profile"
+                      >
+                        <Edit className="h-4 w-4" />
                       </button>
-                    </Link>
-                  </div>
+                      <Link to="/settings" className="flex items-center">
+                        <button className="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors shadow-sm">
+                          <Settings className="h-5 w-5" />
+                        </button>
+                      </Link>
+                    </div>
                   )}
                 </div>
               </div>
@@ -617,6 +617,25 @@ export default function Profile() {
               />
               
               <div className="flex space-x-3 pt-4">
+                {user?.avatar_url && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        if (user && updateUser) {
+                          await updateUser({ avatar_url: '' });
+                          showNotification('Profile picture removed successfully!', 'success');
+                          setShowAvatarUpload(false);
+                        }
+                      } catch (error) {
+                        console.error('Error removing avatar:', error);
+                        showNotification('Failed to remove profile picture. Please try again.', 'error');
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                  >
+                    Remove Photo
+                  </button>
+                )}
                 <button
                   onClick={() => setShowAvatarUpload(false)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

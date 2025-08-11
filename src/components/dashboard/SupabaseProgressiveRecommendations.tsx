@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Clock, Brain, Target, ExternalLink, CheckCircle, Wifi, WifiOff, User, TrendingUp, Zap, Award, BarChart3, Lightbulb, AlertTriangle } from 'lucide-react';
+import { Clock, Brain, Target, ExternalLink, CheckCircle, Wifi, WifiOff, User, TrendingUp, Lightbulb, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ProblemProgressService } from '../../services/problemProgressService';
 import { SupabaseAuthService } from '../../services/supabaseAuthService';
 import { UserSessionService } from '../../services/userSessionService';
 import { DailyRecommendationsService } from '../../services/dailyRecommendationsService';
+import GeminiRecommendationsService from '../../services/geminiRecommendationsService';
+import type { GeminiSmartRecommendation } from '../../services/geminiRecommendationsService';
 import { supabase } from '../../lib/supabase';
 import { 
   getProgressiveDailyRecommendations, 
@@ -830,6 +832,12 @@ export default function SupabaseProgressiveRecommendations() {
   const [mlInsights, setMlInsights] = useState<MachineLearningInsights | null>(null);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [showAiRecommendations, setShowAiRecommendations] = useState<boolean>(false);
+  
+  // Gemini AI State
+  const [geminiRecommendations, setGeminiRecommendations] = useState<GeminiSmartRecommendation[]>([]);
+  const [geminiInsights, setGeminiInsights] = useState<any>(null);
+  const [geminiProcessing, setGeminiProcessing] = useState(false);
+  const [showGeminiRecommendations, setShowGeminiRecommendations] = useState<boolean>(false);
   // Remove the aiRecommendationsEnabled state since we're using simple hide/show
 
   useEffect(() => {
@@ -1289,6 +1297,78 @@ export default function SupabaseProgressiveRecommendations() {
       setAiProcessing(false);
     }
   }, [dailyRecommendation, userProgress, learningPattern, cognitiveLoad]);
+
+  // Generate Gemini AI Recommendations
+  const generateGeminiRecommendations = useCallback(async () => {
+    if (!dailyRecommendation?.problems || !learningPattern || !cognitiveLoad) {
+      console.warn('Missing required data for Gemini recommendations');
+      return;
+    }
+
+    setGeminiProcessing(true);
+    try {
+      console.log('🤖 Generating Gemini AI recommendations...');
+      
+      // Prepare request data for Gemini
+      const request = {
+        userProgress: {
+          solvedProblems: userProgress.solvedProblems.size,
+          currentStreak: userProgress.currentStreak,
+          activeDays: userProgress.totalActiveDays,
+          level: userProgress.currentLevel?.stage || 1,
+          weakAreas: [], // LearningLevel doesn't have weakAreas, using empty array
+          strongAreas: userProgress.currentLevel?.skillAreas || [], // Using skillAreas instead
+          recentActivity: []
+        },
+        learningPattern: {
+          preferredTopics: learningPattern.preferredTopics,
+          avoidedTopics: learningPattern.avoidedTopics,
+          peakPerformanceHours: learningPattern.peakPerformanceHours,
+          learningVelocity: learningPattern.learningVelocity,
+          retentionRate: learningPattern.retentionRate,
+          consistencyScore: learningPattern.consistencyScore
+        },
+        cognitiveLoad: {
+          currentLoad: cognitiveLoad.currentLoad,
+          burnoutRisk: cognitiveLoad.burnoutRisk,
+          fatigueLevel: cognitiveLoad.fatigueLevel,
+          concentrationScore: cognitiveLoad.concentrationScore
+        },
+        availableProblems: dailyRecommendation.problems,
+        targetCount: 6
+      };
+
+      const response = await GeminiRecommendationsService.generateSmartRecommendations(request);
+      
+      if (response.success && response.data) {
+        setGeminiRecommendations(response.data.recommendations);
+        setGeminiInsights(response.data.insights);
+        setShowGeminiRecommendations(true);
+        console.log(`✅ Gemini recommendations generated: ${response.data.recommendations.length} problems`);
+      } else {
+        console.warn('⚠️ Gemini failed, using fallback recommendations');
+        const fallbackRecs = GeminiRecommendationsService.getFallbackRecommendations(
+          dailyRecommendation.problems,
+          userProgress,
+          6
+        );
+        setGeminiRecommendations(fallbackRecs);
+        setShowGeminiRecommendations(true);
+      }
+    } catch (error) {
+      console.error('❌ Error generating Gemini recommendations:', error);
+      // Use fallback recommendations on error
+      const fallbackRecs = GeminiRecommendationsService.getFallbackRecommendations(
+        dailyRecommendation.problems,
+        userProgress,
+        6
+      );
+      setGeminiRecommendations(fallbackRecs);
+      setShowGeminiRecommendations(true);
+    } finally {
+      setGeminiProcessing(false);
+    }
+  }, [dailyRecommendation, userProgress, learningPattern, cognitiveLoad]);
   
   // Memoized AI insights for performance
   const aiInsights = useMemo(() => {
@@ -1489,36 +1569,12 @@ export default function SupabaseProgressiveRecommendations() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 lg:p-6">
-      {/* Header with Real-time Status */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-2 sm:space-y-0">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          {user && (
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              {isOnline ? (
-                <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
-                  <Wifi className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="text-xs font-medium">Live</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-1 text-orange-600 dark:text-orange-400">
-                  <WifiOff className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="text-xs font-medium">Offline</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          {lastSyncTime && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Last sync: {lastSyncTime.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+      {/* Header - Connection status removed */}
 
       <div className="space-y-3 sm:space-y-4">
+
+
         {/* User Preferences Display */}
         {user && userPreferences && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 sm:p-4">
@@ -1613,20 +1669,20 @@ export default function SupabaseProgressiveRecommendations() {
 
 
         {/* Progressive Learning Path */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">📚 Progressive Learning Path</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 mb-4">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">📚 Progressive Learning Path</h3>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">
               Day {userProgress.totalActiveDays} • {userProgress.currentLevel.name}
             </span>
           </div>
         </div>
 
         {/* Motivational Message */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
           <div className="flex items-center space-x-2">
-            <Target className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <span className="text-blue-800 dark:text-blue-200 font-medium">
+            <Target className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <span className="text-sm text-blue-800 dark:text-blue-200 font-medium">
               {dailyRecommendation.problems.length} problems waiting for you. {motivationalMessage}
             </span>
           </div>
@@ -1634,23 +1690,230 @@ export default function SupabaseProgressiveRecommendations() {
 
         {/* AI Recommendations Generate Button */}
         {!showAiRecommendations && learningPattern && cognitiveLoad && dailyRecommendation?.problems && (
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                <h4 className="font-medium text-gray-900 dark:text-gray-100">AI-Powered Smart Recommendations</h4>
+                <Brain className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">AI-Powered Smart Recommendations</h4>
               </div>
               
               <button
                 onClick={generateAiRecommendations}
                 disabled={aiProcessing}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg text-sm font-medium transition-colors"
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 min-h-[36px]"
               >
-                {aiProcessing ? 'Analyzing...' : 'Generate'}
+                {aiProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                    <span>Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-3 w-3" />
+                    <span>Generate</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
         )}
+
+        {/* Gemini AI Recommendations Generate Button */}
+        {!showGeminiRecommendations && learningPattern && cognitiveLoad && dailyRecommendation?.problems && (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 min-w-0 flex-1">
+                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <div className="flex items-center space-x-2 min-w-0">
+                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">Gemini AI Recommendations</h4>
+                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                    NEW
+                  </span>
+                </div>
+              </div>
+              
+              <button
+                onClick={generateGeminiRecommendations}
+                disabled={geminiProcessing}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 min-h-[36px] flex-shrink-0"
+              >
+                {geminiProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                    <span className="whitespace-nowrap">Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3 w-3" />
+                    <span className="whitespace-nowrap">Generate</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Gemini AI Recommendations */}
+        {showGeminiRecommendations && geminiRecommendations.length > 0 ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <h4 className="font-medium text-base sm:text-lg text-gray-900 dark:text-gray-100">Gemini AI Smart Recommendations</h4>
+              </div>
+              <button
+                onClick={() => setShowGeminiRecommendations(false)}
+                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[44px] flex items-center justify-center"
+              >
+                Hide
+              </button>
+            </div>
+
+            {/* Gemini Insights */}
+            {geminiInsights && (
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-3 mb-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Gemini Insights</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                  <div className="flex flex-col xs:flex-row xs:justify-between space-y-1 xs:space-y-0">
+                    <span className="text-emerald-600 dark:text-emerald-400">Learning Phase:</span>
+                    <span className="font-medium text-emerald-900 dark:text-emerald-100">{geminiInsights.learningPhase}</span>
+                  </div>
+                  <div className="flex flex-col xs:flex-row xs:justify-between space-y-1 xs:space-y-0">
+                    <span className="text-emerald-600 dark:text-emerald-400">User Cluster:</span>
+                    <span className="font-medium text-emerald-900 dark:text-emerald-100">{geminiInsights.userCluster}</span>
+                  </div>
+                </div>
+                <div className="mt-3 p-2 bg-emerald-100 dark:bg-emerald-800/50 rounded-lg">
+                  <div className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 font-medium">
+                    🎯 Next Milestone: {geminiInsights.nextMilestone}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {geminiRecommendations.map((geminiRec) => {
+              const problem = dailyRecommendation.problems.find(p => p.id === geminiRec.problemId);
+              if (!problem) return null;
+
+              const isSolved = completedProblems.has(problem.id);
+              const platformInfo = getPlatformInfo(problem.link);
+              
+              // Simplified confidence display
+              const getConfidenceLabel = (score: number) => {
+                if (score >= 90) return { label: 'Perfect Match', color: 'text-green-600 dark:text-green-400', emoji: '🎯' };
+                if (score >= 80) return { label: 'Great Match', color: 'text-green-600 dark:text-green-400', emoji: '✨' };
+                if (score >= 70) return { label: 'Good Match', color: 'text-blue-600 dark:text-blue-400', emoji: '👍' };
+                return { label: 'Fair Match', color: 'text-yellow-600 dark:text-yellow-400', emoji: '⚡' };
+              };
+              
+              const confidence = getConfidenceLabel(geminiRec.aiConfidence.overall);
+
+              return (
+                <div 
+                  key={geminiRec.problemId}
+                  className={`border rounded-lg p-4 space-y-3 ${
+                    isSolved 
+                      ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20' 
+                      : 'border-emerald-200 dark:border-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10'
+                  }`}
+                >
+                  {/* Header with problem info */}
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
+                    <div className="flex-1 min-w-0">
+                      <h4 className={`font-medium text-base sm:text-lg leading-tight ${
+                        isSolved 
+                          ? 'text-green-800 dark:text-green-200' 
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {isSolved && '✅ '}{geminiRec.title}
+                      </h4>
+                      <div className="flex flex-col xs:flex-row xs:items-center xs:space-x-3 space-y-2 xs:space-y-0 mt-3">
+                        <span className={`px-3 py-1.5 rounded-full text-sm font-medium w-fit ${getDifficultyColor(geminiRec.difficulty)}`}>
+                          {geminiRec.difficulty}
+                        </span>
+                        <div className="flex items-center space-x-1 text-sm text-gray-600 dark:text-gray-400">
+                          <Clock className="h-4 w-4 flex-shrink-0" />
+                          <span>{geminiRec.predictedSolveTime} min</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Simplified confidence indicator */}
+                    <div className="flex sm:flex-col items-center sm:items-end space-x-2 sm:space-x-0 sm:text-right">
+                      <div className={`flex items-center space-x-1 text-sm font-medium ${confidence.color}`}>
+                        <span>{confidence.emoji}</span>
+                        <span className="whitespace-nowrap">{confidence.label}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 sm:mt-1">
+                        {Math.round(geminiRec.aiConfidence.overall)}% Match
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Why Gemini recommends this */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 border border-emerald-100 dark:border-emerald-800">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                      <span className="text-sm sm:text-base font-medium text-emerald-900 dark:text-emerald-100">Why this problem?</span>
+                    </div>
+                    <p className="text-sm sm:text-base text-emerald-700 dark:text-emerald-300 leading-relaxed">{geminiRec.reasoning}</p>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                    <div className="flex flex-col xs:flex-row xs:items-center space-y-2 xs:space-y-0 xs:space-x-2">
+                      {isSolved ? (
+                        <div className="flex items-center space-x-2 px-4 py-2.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 rounded-lg text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start">
+                          <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                          <span>✅ Solved</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleProblemSolved(problem.id)}
+                          className="flex items-center space-x-2 px-4 py-2.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-all duration-200 text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                          <span>Mark Solved</span>
+                        </button>
+                      )}
+                      {problem.link && (
+                        <a
+                          href={problem.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center space-x-2 px-4 py-2.5 text-white rounded-lg transition-all duration-200 text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start transform hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg ${platformInfo.color}`}
+                        >
+                          <span>{platformInfo.name}</span>
+                          <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                        </a>
+                      )}
+                    </div>
+                    
+                    {/* Gemini AI Confidence Indicator */}
+                    <div className="flex items-center justify-center xs:justify-start sm:justify-end space-x-2 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 rounded-lg sm:bg-transparent sm:dark:bg-transparent sm:px-0 sm:py-0">
+                      <div className={`w-3 h-3 rounded-full ${
+                        geminiRec.aiConfidence.overall >= 80 ? 'bg-green-500' :
+                        geminiRec.aiConfidence.overall >= 60 ? 'bg-yellow-500' :
+                        'bg-orange-500'
+                      }`}></div>
+                      <span className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 sm:text-gray-500 sm:dark:text-gray-400 font-medium sm:font-normal">Gemini Recommended</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : showGeminiRecommendations && geminiRecommendations.length === 0 ? (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4 text-center">
+            <Sparkles className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
+            <p className="text-emerald-700 dark:text-emerald-300 text-sm">
+              Gemini AI is analyzing your learning patterns...
+            </p>
+          </div>
+        ) : null}
 
         {/* Smart AI Recommendations */}
         {showAiRecommendations && smartRecommendations.length > 0 ? (

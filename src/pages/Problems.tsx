@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { transformDSAQuestions, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
 import { PerformanceMonitor } from '../utils/performanceMonitor';
+import { AIFilteringService, FilterCriteria } from '../services/aiFilteringService';
 
 // Problem interface is now imported from dsaDatabase
 
@@ -152,6 +153,11 @@ export default function Problems() {
   const [scrollButtonState, setScrollButtonState] = useState<'hidden' | 'down' | 'up'>('hidden');
   const [isScrolling, setIsScrolling] = useState(false);
   
+  // AI Filtering state
+  const [isAIFiltering, setIsAIFiltering] = useState(false);
+  const [aiFilterCriteria, setAiFilterCriteria] = useState<FilterCriteria | null>(null);
+  const [showAISearch, setShowAISearch] = useState(false);
+  
   // Refs for performance optimization
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const scrollTimeoutRef = useRef<NodeJS.Timeout>();
@@ -177,6 +183,28 @@ export default function Problems() {
       setIsRefreshing(false);
     }
   }, [syncWithSupabase, isRefreshing]);
+
+  // AI Filtering function
+  const handleAIFilter = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setAiFilterCriteria(null);
+      return;
+    }
+
+    setIsAIFiltering(true);
+    try {
+      const criteria = await AIFilteringService.parseFilterQuery(query, problems);
+      setAiFilterCriteria(criteria);
+      setCurrentPage(1); // Reset to first page
+    } catch (error) {
+      console.error('AI filtering failed:', error);
+      // Fallback to regular search
+      setSearchTerm(query);
+      setAiFilterCriteria(null);
+    } finally {
+      setIsAIFiltering(false);
+    }
+  }, [problems]);
   
   // Fast initial load, then background sync (only once)
   useEffect(() => {
@@ -257,21 +285,29 @@ export default function Problems() {
     
     const timer = PerformanceMonitor.startTimer('problems_filter');
     
-    const filtered = problems.filter((problem: Problem) => {
-      const matchesSearch = debouncedSearchTerm === '' || 
-                           problem.title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                           problem.companies.some(company => company.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-                           problem.category.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
-      const matchesDifficulty = selectedDifficulty === 'All' || problem.difficulty === selectedDifficulty;
-      const matchesCategory = selectedCategory === 'All' || problem.category === selectedCategory;
-      const matchesStatus = selectedStatus === 'All' || problem.status === selectedStatus;
-      const matchesCompany = selectedCompany === 'All' || problem.companies.includes(selectedCompany);
-      const matchesBookmark = selectedBookmark === 'All' || 
-                             (selectedBookmark === 'Bookmarked' && problem.isBookmarked) ||
-                             (selectedBookmark === 'Not Bookmarked' && !problem.isBookmarked);
-      
-      return matchesSearch && matchesDifficulty && matchesCategory && matchesStatus && matchesCompany && matchesBookmark;
-    });
+    let filtered = problems;
+    
+    // Apply AI filter criteria if available
+    if (aiFilterCriteria) {
+      filtered = AIFilteringService.applyFilterCriteria(filtered, aiFilterCriteria);
+    } else {
+      // Apply manual filters
+      filtered = problems.filter((problem: Problem) => {
+        const matchesSearch = debouncedSearchTerm === '' || 
+                             problem.title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+                             problem.companies.some(company => company.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+                             problem.category.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+        const matchesDifficulty = selectedDifficulty === 'All' || problem.difficulty === selectedDifficulty;
+        const matchesCategory = selectedCategory === 'All' || problem.category === selectedCategory;
+        const matchesStatus = selectedStatus === 'All' || problem.status === selectedStatus;
+        const matchesCompany = selectedCompany === 'All' || problem.companies.includes(selectedCompany);
+        const matchesBookmark = selectedBookmark === 'All' || 
+                               (selectedBookmark === 'Bookmarked' && problem.isBookmarked) ||
+                               (selectedBookmark === 'Not Bookmarked' && !problem.isBookmarked);
+        
+        return matchesSearch && matchesDifficulty && matchesCategory && matchesStatus && matchesCompany && matchesBookmark;
+      });
+    }
     
     // Apply sorting
     const sorted = [...filtered].sort((a: Problem, b: Problem) => {
@@ -295,7 +331,7 @@ export default function Problems() {
     
     timer();
     return sorted;
-  }, [problems, debouncedSearchTerm, selectedDifficulty, selectedCategory, selectedStatus, selectedCompany, selectedBookmark, sortBy]);
+  }, [problems, debouncedSearchTerm, selectedDifficulty, selectedCategory, selectedStatus, selectedCompany, selectedBookmark, sortBy, aiFilterCriteria]);
   
   // Paginated problems for virtualization
   const paginatedProblems = useMemo(() => {
@@ -504,16 +540,62 @@ export default function Problems() {
 
       {/* Enhanced Filters */}
       <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8">
-        {/* Search Bar */}
-        <div className="relative mb-4 sm:mb-6">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4 sm:h-5 sm:w-5" />
-          <input
-            type="text"
-            placeholder="Search problems, companies, or categories..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-          />
+        {/* Search Bar with AI Toggle */}
+        <div className="space-y-3 mb-4 sm:mb-6">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAISearch(!showAISearch)}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors text-sm ${
+                showAISearch
+                  ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>AI Search</span>
+            </button>
+            {aiFilterCriteria && (
+              <button
+                onClick={() => setAiFilterCriteria(null)}
+                className="flex items-center space-x-1 px-2 py-1 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-xs"
+              >
+                <span>Clear AI Filter</span>
+              </button>
+            )}
+          </div>
+          
+          {showAISearch ? (
+            <div className="relative">
+              <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 dark:text-purple-500 h-4 w-4 sm:h-5 sm:w-5" />
+              <input
+                type="text"
+                placeholder="Ask AI: 'Show me easy array problems from Google' or 'Find unsolved medium DP problems'..."
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAIFilter(e.currentTarget.value);
+                  }
+                }}
+                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border-2 border-purple-300 dark:border-purple-600 rounded-lg bg-purple-50 dark:bg-purple-900/10 text-gray-900 dark:text-gray-100 placeholder-purple-500 dark:placeholder-purple-400 focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-purple-500 transition-colors duration-300 text-sm sm:text-base"
+                disabled={isAIFiltering}
+              />
+              {isAIFiltering && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4 sm:h-5 sm:w-5" />
+              <input
+                type="text"
+                placeholder="Search problems, companies, or categories..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
+              />
+            </div>
+          )}
         </div>
         
         {/* Mobile-First Filter Grid with Labels */}

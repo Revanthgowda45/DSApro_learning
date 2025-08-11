@@ -4,7 +4,7 @@ import {
   Clock, 
   Star, 
   Bookmark, 
-
+  Bot,
   Target,
   TrendingUp,
   Users,
@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ProblemProgressService } from '../../services/problemProgressService';
 import Stopwatch from '../ui/Stopwatch';
 import { timeTrackingService, ProblemTimeStats } from '../../services/timeTrackingService';
+import GeminiAssistant from '../ai/GeminiAssistant';
 
 interface ProblemCardProps {
   problem: Problem;
@@ -52,6 +53,7 @@ export default function ProblemCard({
   const [isCopied, setIsCopied] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(problem.isBookmarked);
   const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
+  const [showChatGPT, setShowChatGPT] = useState(false);
 
   // Load problem data when component mounts (optimized to prevent double fetching)
   useEffect(() => {
@@ -800,6 +802,22 @@ Link: ${problem.link || 'N/A'}`;
           {/* Status Actions - Right aligned on desktop */}
           <div className="flex items-center justify-end space-x-2 ml-auto">
             <button 
+              onClick={() => setShowChatGPT(true)}
+              className="group relative px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-lg shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center space-x-2 border border-blue-400/20"
+              title="Get AI assistance for hints, analysis, and similar problems"
+            >
+              <div className="relative">
+                <Bot className="h-4 w-4 group-hover:animate-pulse" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+              <span className="hidden sm:inline">AI Help</span>
+              <span className="sm:hidden">AI</span>
+              
+              {/* Subtle glow effect */}
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-blue-500/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -z-10 blur-xl"></div>
+            </button>
+            
+            <button 
               onClick={handleCopyProblem}
               className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors font-medium flex items-center space-x-1"
               title="Copy problem details"
@@ -887,6 +905,13 @@ Link: ${problem.link || 'N/A'}`;
           </div>
         )}
       </div>
+      
+      {/* Gemini AI Assistant Modal */}
+      <GeminiAssistant
+        problem={problem}
+        isOpen={showChatGPT}
+        onClose={() => setShowChatGPT(false)}
+      />
     </div>
   );
 }

@@ -14,7 +14,8 @@ import {
   User,
   LogOut,
   Timer,
-  Info
+  Info,
+  GamepadIcon
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -26,9 +27,10 @@ export default function Navbar() {
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', description: 'Your learning overview' },
     { path: '/problems', icon: BookOpen, label: 'Problems', description: '375+ DSA problems' },
+    { path: '/gaming', icon: GamepadIcon, label: 'Gaming', description: 'AI-powered challenges' },
     { path: '/progress', icon: TrendingUp, label: 'Progress', description: 'Track your journey' },
-    { path: '/timer', icon: Timer, label: 'Timer', description: 'Track solving time' },
-    { path: '/profile', icon: User, label: 'Profile', description: 'Your account settings' }
+    { path: '/profile', icon: User, label: 'Profile', description: 'Your account settings' },
+    { path: '/timer', icon: Timer, label: 'Timer', description: 'Track solving time' }
   ];
 
   const quickActions = [

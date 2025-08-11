@@ -17,6 +17,7 @@ import About from './pages/About';
 
 import Admin from './pages/Admin';
 import Stopwatch from './pages/Stopwatch';
+import Gaming from './pages/Gaming';
 import './utils/progressReset'; // Import for console access
 import './utils/resetAnalytics'; // Import reset analytics utility
 import { NotificationService } from './services/notificationService';
@@ -140,6 +141,11 @@ function AppContent() {
           <Route path="/timer" element={
             <ProtectedRoute>
               <Stopwatch />
+            </ProtectedRoute>
+          } />
+          <Route path="/gaming" element={
+            <ProtectedRoute>
+              <Gaming />
             </ProtectedRoute>
           } />
           <Route path="/about" element={<About />} />
