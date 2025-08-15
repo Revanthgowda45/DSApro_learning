@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp, Sparkles, Code } from 'lucide-react';
 import { transformDSAQuestions, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
 import { useOptimizedAnalytics } from '../hooks/useOptimizedAnalytics';
@@ -394,6 +394,8 @@ export default function Problems() {
     setSortBy('default');
     setItemsPerPage(20);
     setCurrentPage(1);
+    setAiFilterCriteria(null); // Clear AI filters too
+    setShowAISearch(false); // Reset to regular search mode
     
     timer();
   }, []);
@@ -516,6 +518,15 @@ export default function Problems() {
         </div>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <button
+            onClick={() => window.open('/code-editor', '_blank')}
+            className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/30 transition-colors text-sm sm:text-base"
+            title="Open Code Editor in new tab"
+          >
+            <Code className="h-4 w-4" />
+            <span className="hidden xs:inline">Code Editor</span>
+            <span className="xs:hidden">Code</span>
+          </button>
+          <button
             onClick={() => setShowAIInsights(!showAIInsights)}
             className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${
               showAIInsights
@@ -540,62 +551,113 @@ export default function Problems() {
 
       {/* Enhanced Filters */}
       <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8">
-        {/* Search Bar with AI Toggle */}
-        <div className="space-y-3 mb-4 sm:mb-6">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAISearch(!showAISearch)}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors text-sm ${
-                showAISearch
-                  ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>AI Search</span>
-            </button>
-            {aiFilterCriteria && (
-              <button
-                onClick={() => setAiFilterCriteria(null)}
-                className="flex items-center space-x-1 px-2 py-1 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-xs"
-              >
-                <span>Clear AI Filter</span>
-              </button>
-            )}
-          </div>
-          
-          {showAISearch ? (
-            <div className="relative">
+        {/* Unified Mobile-Friendly Search */}
+        <div className="mb-4 sm:mb-6">
+          <div className="relative">
+            {/* Search Icon */}
+            {showAISearch ? (
               <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 dark:text-purple-500 h-4 w-4 sm:h-5 sm:w-5" />
-              <input
-                type="text"
-                placeholder="Ask AI: 'Show me easy array problems from Google' or 'Find unsolved medium DP problems'..."
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
+            ) : (
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4 sm:h-5 sm:w-5" />
+            )}
+            
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder={showAISearch 
+                ? "Ask AI: 'easy array problems from Google' or 'unsolved medium DP'..." 
+                : "Search problems, companies, or categories..."
+              }
+              value={searchTerm}
+              onChange={handleSearchChange}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  if (showAISearch && e.currentTarget.value.trim()) {
                     handleAIFilter(e.currentTarget.value);
                   }
-                }}
-                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border-2 border-purple-300 dark:border-purple-600 rounded-lg bg-purple-50 dark:bg-purple-900/10 text-gray-900 dark:text-gray-100 placeholder-purple-500 dark:placeholder-purple-400 focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-purple-500 transition-colors duration-300 text-sm sm:text-base"
-                disabled={isAIFiltering}
-              />
+                }
+              }}
+              onInput={(e) => {
+                // Clear AI filter when user starts typing in regular mode
+                if (!showAISearch && aiFilterCriteria) {
+                  setAiFilterCriteria(null);
+                }
+              }}
+              className={`w-full pl-9 sm:pl-10 pr-20 py-3 sm:py-3.5 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:border-transparent transition-all duration-300 text-sm sm:text-base ${
+                showAISearch
+                  ? 'border-2 border-purple-300 dark:border-purple-600 bg-purple-50 dark:bg-purple-900/10 placeholder-purple-500 dark:placeholder-purple-400 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-purple-500'
+                  : 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-blue-500 dark:focus:ring-blue-400'
+              }`}
+              disabled={isAIFiltering}
+            />
+            
+            {/* Right Side Controls */}
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+              {/* AI Loading Spinner */}
               {isAIFiltering && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
-                </div>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-1"></div>
+              )}
+              
+              {/* Mobile Search Button (AI Mode) */}
+              {showAISearch && searchTerm.trim() && !isAIFiltering && (
+                <button
+                  onClick={() => handleAIFilter(searchTerm)}
+                  className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors sm:hidden"
+                  title="Search with AI"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              )}
+              
+              {/* Clear AI Filter Button */}
+              {aiFilterCriteria && (
+                <button
+                  onClick={() => setAiFilterCriteria(null)}
+                  className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                  title="Clear AI Filter"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+              
+              {/* AI Toggle Button */}
+              <button
+                onClick={() => setShowAISearch(!showAISearch)}
+                className={`p-2 rounded-md transition-all duration-200 ${
+                  showAISearch
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 shadow-sm'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+                title={showAISearch ? 'Switch to Regular Search' : 'Switch to AI Search'}
+              >
+                <Sparkles className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          
+          {/* Search Mode Indicator */}
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              {showAISearch ? (
+                <>
+                  <Sparkles className="h-3 w-3 text-purple-500" />
+                  <span>AI Search Mode - Ask natural language questions</span>
+                </>
+              ) : (
+                <>
+                  <Search className="h-3 w-3" />
+                  <span>Regular Search - Keywords and filters</span>
+                </>
               )}
             </div>
-          ) : (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4 sm:h-5 sm:w-5" />
-              <input
-                type="text"
-                placeholder="Search problems, companies, or categories..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
-              />
-            </div>
-          )}
+            {aiFilterCriteria && (
+              <span className="text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
+                AI Filtered
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Mobile-First Filter Grid with Labels */}
@@ -861,7 +923,75 @@ export default function Problems() {
         <div className="text-center py-12">
           <Filter className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No problems found</h3>
-          <p className="text-gray-600 dark:text-gray-400">Try adjusting your filters to see more problems.</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">Try adjusting your filters to see more problems.</p>
+          
+          {/* Clear All Filters Button */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={clearFilters}
+              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium shadow-sm"
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span>Clear All Filters</span>
+            </button>
+            
+            {aiFilterCriteria && (
+              <button
+                onClick={() => setAiFilterCriteria(null)}
+                className="flex items-center space-x-2 px-4 py-2 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Clear AI Filter</span>
+              </button>
+            )}
+          </div>
+          
+          {/* Active Filters Summary */}
+          {(searchTerm || debouncedSearchTerm || selectedDifficulty !== 'All' || selectedCategory !== 'All' || selectedStatus !== 'All' || selectedCompany !== 'All' || selectedBookmark !== 'All' || aiFilterCriteria) && (
+            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Active filters:</p>
+              <div className="flex flex-wrap justify-center gap-2 text-xs">
+                {(searchTerm || debouncedSearchTerm) && (
+                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-full">
+                    Search: "{searchTerm || debouncedSearchTerm}"
+                  </span>
+                )}
+                {selectedDifficulty !== 'All' && (
+                  <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 rounded-full">
+                    {selectedDifficulty}
+                  </span>
+                )}
+                {selectedCategory !== 'All' && (
+                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-full">
+                    {selectedCategory}
+                  </span>
+                )}
+                {selectedStatus !== 'All' && (
+                  <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 rounded-full">
+                    {selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1).replace('-', ' ')}
+                  </span>
+                )}
+                {selectedCompany !== 'All' && (
+                  <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded-full">
+                    {selectedCompany}
+                  </span>
+                )}
+                {selectedBookmark !== 'All' && (
+                  <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-full">
+                    <Bookmark className="h-3 w-3 inline mr-1" />
+                    {selectedBookmark}
+                  </span>
+                )}
+                {aiFilterCriteria && (
+                  <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 rounded-full">
+                    AI Filter Active
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
       

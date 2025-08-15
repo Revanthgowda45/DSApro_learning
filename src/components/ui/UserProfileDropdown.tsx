@@ -6,7 +6,8 @@ import {
   LogOut, 
   ChevronDown,
   Crown,
-  Info
+  Info,
+  Timer
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -171,6 +172,15 @@ export default function UserProfileDropdown() {
             >
               <User className="w-4 h-4" />
               <span className="text-sm font-medium">Profile</span>
+            </Link>
+            
+            <Link
+              to="/timer"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center space-x-3 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+            >
+              <Timer className="w-4 h-4" />
+              <span className="text-sm font-medium">Timer</span>
             </Link>
             
             <Link

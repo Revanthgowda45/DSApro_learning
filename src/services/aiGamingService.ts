@@ -1,4 +1,10 @@
-interface GameChallenge {
+/**
+ * Professional AI Gaming Service
+ * Advanced AI-powered coding challenge platform with gaming mechanics
+ */
+
+// Types and Interfaces
+export interface GameChallenge {
   id: string;
   title: string;
   description: string;
@@ -8,232 +14,247 @@ interface GameChallenge {
   solution: string;
   explanation: string;
   points: number;
-  timeLimit: number; // in seconds
-  perfectTime: number; // perfect completion time in seconds for bonus scoring
+  timeLimit: number;
+  perfectTime: number;
+  tags?: string[];
+  companies?: string[];
+  problemLink?: string;
 }
 
-interface GameSession {
+export interface GameSession {
   id: string;
-  userId: string;
   challengeId: string;
   startTime: Date;
   endTime?: Date;
-  score: number;
-  hintsUsed: number;
-  completed: boolean;
   timeSpent: number;
+  hintsUsed: number;
+  score: number;
+  completed: boolean;
+  userSolution?: string;
 }
 
-interface AIResponse {
+export interface AIResponse {
   success: boolean;
   data?: any;
   error?: string;
+  provider?: string;
 }
 
-class AIGamingService {
-  private static readonly GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
-  private static readonly API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+export interface SolutionEvaluation {
+  isCorrect: boolean;
+  score: number;
+  feedback: string;
+  suggestions: string[];
+  hints?: string[];
+  timeComplexity?: string;
+  spaceComplexity?: string;
+  // Enhanced detailed analysis fields
+  lineByLineAnalysis?: Array<{
+    line: number;
+    code: string;
+    issue: string;
+    severity: 'high' | 'medium' | 'low';
+    suggestion: string;
+  }>;
+  codeQualityMetrics?: {
+    cyclomaticComplexity: number;
+    maintainabilityIndex: number;
+    duplicatedLines: number;
+    codeSmells: string[];
+    namingConventions: string;
+  };
+  performanceAnalysis?: {
+    bottlenecks: string[];
+    optimizationOpportunities: string[];
+    memoryUsage: string;
+    runtimePrediction: string;
+  };
+  edgeCaseAnalysis?: {
+    coveredCases: string[];
+    missedCases: string[];
+    testCaseRecommendations: string[];
+  };
+  interviewFeedback?: {
+    strengths: string[];
+    weaknesses: string[];
+    nextSteps: string[];
+    industryReadiness: string;
+  };
+  reasoning?: string;
+}
 
-  // Game categories for DSA learning
-  private static readonly GAME_CATEGORIES = [
-    'Array Manipulation',
-    'String Processing',
-    'Linked Lists',
-    'Stacks & Queues',
-    'Trees & Graphs',
-    'Sorting Algorithms',
-    'Searching Techniques',
-    'Dynamic Programming',
-    'Recursion',
-    'Hash Tables'
+interface DSAProblem {
+  id: number;
+  topic: string;
+  question: string;
+  companies: string[];
+  remarks: string;
+  difficulty: string;
+  link: string;
+}
+
+interface DSADataset {
+  metadata: {
+    title: string;
+    total_questions: number;
+    total_topics: number;
+    recommended_pace: string;
+    difficulty_guidelines: Record<string, string>;
+    hard_questions_count: number;
+  };
+  questions: DSAProblem[];
+}
+
+/**
+ * Professional AI Gaming Service Class
+ * Handles AI-powered challenge generation, solution evaluation, and gaming mechanics
+ */
+export class AIGamingService {
+  private static readonly GAMING_CONFIG = {
+    POINTS: { easy: 100, medium: 250, hard: 500 },
+    TIME_LIMITS: { easy: 300, medium: 600, hard: 1200 },
+    PERFECT_TIME: { easy: 120, medium: 300, hard: 600 },
+    HINT_PENALTY: 0.1,
+  };
+
+  private static readonly CATEGORY_MAP: Record<string, string> = {
+    'arrays': 'Arrays',
+    '2d arrays': '2D Arrays',
+    '2darrays': '2D Arrays',
+    'strings': 'Strings',
+    'searching & sorting': 'Searching & Sorting',
+    'searching-sorting': 'Searching & Sorting',
+    'searchingsorting': 'Searching & Sorting',
+    'dynamic programming': 'DP',
+    'dynamicprogramming': 'DP',
+    'dp': 'DP',
+    'graphs': 'Graph',
+    'binary trees': 'Binary Trees',
+    'binarytrees': 'Binary Trees',
+    'binary-trees': 'Binary Trees',
+    'binary search trees': 'Binary Search Trees',
+    'binarysearchtrees': 'Binary Search Trees',
+    'linked list': 'Linked List',
+    'linkedlist': 'Linked List',
+    'linked-list': 'Linked List',
+    'backtracking': 'Backtracking',
+    'stacks & queues': 'Stacks & Queues',
+    'stacksqueues': 'Stacks & Queues',
+    'stacks-queues': 'Stacks & Queues',
+    'heaps & hashing': 'Heaps & Hashing',
+    'heapshashing': 'Heaps & Hashing',
+    'heaps-hashing': 'Heaps & Hashing',
+    'greedy': 'Greedy',
+    'tries': 'Tries',
+    'bit manipulation': 'Bit Manipulation',
+    'bitmanipulation': 'Bit Manipulation',
+    'segment trees': 'Segment Trees',
+    'segmenttrees': 'Segment Trees',
+  };
+
+  static readonly CATEGORIES = [
+    'Arrays', 'Strings', 'Searching & Sorting', 'Dynamic Programming',
+    'Graphs', 'Binary Trees', 'Linked List', 'Backtracking', 
+    'Stacks & Queues', 'Heaps & Hashing', 'Greedy'
   ];
 
-  /**
-   * Calculate perfect time based on difficulty level (aligned with DSA project guidelines)
-   */
-  private static getPerfectTime(difficulty: 'easy' | 'medium' | 'hard'): number {
-    switch (difficulty) {
-      case 'easy':
-        return 480; // 8 minutes - perfect time for easy problems (5-10 mins range)
-      case 'medium':
-        return 1080; // 18 minutes - perfect time for medium problems (15-20 mins range)
-      case 'hard':
-        return 3000; // 50 minutes - perfect time for hard problems (40-60 mins range)
-      default:
-        return 1080;
-    }
+  private static dsaDataCache: DSADataset | null = null;
+
+  private static get OPENROUTER_API_KEY(): string {
+    return import.meta.env.VITE_OPENROUTER_API_KEY || '';
+  }
+
+  private static get GEMINI_API_KEY(): string {
+    return import.meta.env.VITE_GEMINI_API_KEY || '';
   }
 
   /**
-   * Generate a new game challenge using AI
+   * Initialize service
+   */
+  static initialize(): boolean {
+    const hasProviders = !!(this.OPENROUTER_API_KEY || this.GEMINI_API_KEY);
+    console.log(`🚀 AI Gaming Service ${hasProviders ? 'initialized' : 'using fallback mode'}`);
+    return hasProviders;
+  }
+
+  /**
+   * Generate new challenge
    */
   static async generateChallenge(
     difficulty: 'easy' | 'medium' | 'hard',
     category: string,
     userLevel: number = 1
+  ): Promise<GameChallenge> {
+    console.log(`🎯 Generating ${difficulty} ${category} challenge`);
+
+    try {
+      const aiChallenge = await this.generateAIChallenge(difficulty, category, userLevel);
+      if (aiChallenge) {
+        console.log('✅ AI challenge generated:', aiChallenge.title);
+        return aiChallenge;
+      }
+    } catch (error) {
+      console.warn('⚠️ AI generation failed:', error);
+    }
+
+    console.log('🔄 Using DSA dataset fallback');
+    return await this.getDSAChallenge(difficulty, category);
+  }
+
+  /**
+   * Generate AI challenge
+   */
+  private static async generateAIChallenge(
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string,
+    userLevel: number
   ): Promise<GameChallenge | null> {
-    console.log(`🎯 Generating ${difficulty} challenge for ${category} (level ${userLevel})`);
+    const prompt = this.createChallengePrompt(difficulty, category, userLevel);
     
-    try {
-      const prompt = this.createChallengePrompt(difficulty, category, userLevel);
-      const response = await this.callGeminiAPI(prompt);
-      
-      if (response.success && response.data) {
-        console.log('✅ AI response received, parsing...');
-        const challenge = this.parseAIResponse(response.data, difficulty, category);
-        console.log('✅ Challenge parsed successfully:', challenge.title);
-        return challenge;
+    // Try OpenRouter first
+    if (this.OPENROUTER_API_KEY) {
+      try {
+        const response = await this.callOpenRouter(prompt);
+        if (response.success && response.data) {
+          return this.parseAIResponse(response.data, difficulty, category);
+        }
+      } catch (error) {
+        console.warn('OpenRouter failed, trying Gemini:', error);
       }
-      
-      console.warn('⚠️ AI response failed, using fallback challenge');
-      return this.getFallbackChallenge(difficulty, category);
-    } catch (error) {
-      console.error('❌ Error generating challenge:', error);
-      console.log('🔄 Using fallback challenge instead');
-      return this.getFallbackChallenge(difficulty, category);
     }
+
+    // Try Gemini as fallback
+    if (this.GEMINI_API_KEY) {
+      try {
+        const response = await this.callGemini(prompt);
+        if (response.success && response.data) {
+          return this.parseAIResponse(response.data, difficulty, category);
+        }
+      } catch (error) {
+        console.warn('Gemini also failed:', error);
+      }
+    }
+
+    return null;
   }
 
-  /**
-   * Get AI-powered hint for a challenge
-   */
-  static async getHint(challenge: GameChallenge, currentProgress: string): Promise<string> {
-    try {
-      const prompt = `
-        Challenge: ${challenge.title}
-        Description: ${challenge.description}
-        User's current progress: ${currentProgress}
-        
-        Provide a helpful hint that guides the user toward the solution without giving it away completely.
-        The hint should be encouraging and educational, suitable for a beginner.
-        Keep it under 100 words.
-      `;
-
-      const response = await this.callGeminiAPI(prompt);
-      
-      if (response.success && response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return response.data.candidates[0].content.parts[0].text.trim();
-      }
-      
-      return challenge.hints[Math.floor(Math.random() * challenge.hints.length)];
-    } catch (error) {
-      console.error('Error getting hint:', error);
-      return challenge.hints[Math.floor(Math.random() * challenge.hints.length)];
-    }
-  }
-
-  /**
-   * Get AI explanation for solution
-   */
-  static async getExplanation(challenge: GameChallenge, userSolution: string): Promise<string> {
-    try {
-      const prompt = `
-        Challenge: ${challenge.title}
-        Correct Solution: ${challenge.solution}
-        User's Solution: ${userSolution}
-        
-        Provide a detailed explanation of the solution, highlighting:
-        1. The approach used
-        2. Time and space complexity
-        3. Why this solution works
-        4. Any optimizations possible
-        
-        If the user's solution is different, compare it with the optimal solution.
-        Keep the explanation beginner-friendly and encouraging.
-      `;
-
-      const response = await this.callGeminiAPI(prompt);
-      
-      if (response.success && response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return response.data.candidates[0].content.parts[0].text.trim();
-      }
-      
-      return challenge.explanation;
-    } catch (error) {
-      console.error('Error getting explanation:', error);
-      return challenge.explanation;
-    }
-  }
-
-  /**
-   * Generate personalized learning path
-   */
-  static async generateLearningPath(
-    userProgress: any,
-    weakAreas: string[],
-    strengths: string[]
-  ): Promise<string[]> {
-    try {
-      const prompt = `
-        User Progress Analysis:
-        - Completed challenges: ${userProgress.completedChallenges || 0}
-        - Average score: ${userProgress.averageScore || 0}
-        - Weak areas: ${weakAreas.join(', ')}
-        - Strong areas: ${strengths.join(', ')}
-        
-        Generate a personalized learning path with 5 recommended topics/challenges
-        that will help improve the user's weak areas while building on their strengths.
-        Focus on DSA concepts suitable for beginners.
-        
-        Return as a simple list of topics, one per line.
-      `;
-
-      const response = await this.callGeminiAPI(prompt);
-      
-      if (response.success && response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const text = response.data.candidates[0].content.parts[0].text.trim();
-        return text.split('\n').filter((line: string) => line.trim()).slice(0, 5);
-      }
-      
-      return this.getDefaultLearningPath();
-    } catch (error) {
-      console.error('Error generating learning path:', error);
-      return this.getDefaultLearningPath();
-    }
-  }
-
-  /**
-   * Call Gemini API with improved error handling
-   */
-  private static async callGeminiAPI(prompt: string): Promise<AIResponse> {
-    if (!this.API_KEY) {
-      console.warn('🔑 Gemini API key not configured - using fallback responses');
-      return { success: false, error: 'API key not configured' };
-    }
+  private static async callOpenRouter(prompt: string): Promise<AIResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      console.log('🌐 Making API call to Gemini...');
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      const response = await fetch(`${this.GEMINI_API_URL}?key=${this.API_KEY}`, {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${this.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin,
         },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 1024,
-          },
-          safetySettings: [
-            {
-              category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            }
-          ]
+          model: 'anthropic/claude-3.5-sonnet',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 2000,
         }),
         signal: controller.signal
       });
@@ -241,548 +262,1247 @@ class AIGamingService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error(`❌ API request failed: ${response.status} - ${errorText}`);
-        
-        if (response.status === 404) {
-          throw new Error(`API endpoint not found. Please check if the Gemini API model is available.`);
-        } else if (response.status === 403) {
-          throw new Error(`API key invalid or quota exceeded. Please check your Gemini API key.`);
-        } else if (response.status === 429) {
-          throw new Error(`Rate limit exceeded. Please wait a moment and try again.`);
-        } else {
-          throw new Error(`API request failed: ${response.status} - ${errorText}`);
-        }
+        throw new Error(`OpenRouter API error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('✅ API response received successfully');
-      return { success: true, data };
+      return {
+        success: true,
+        data: data.choices?.[0]?.message?.content,
+        provider: 'OpenRouter'
+      };
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error('⏰ API request timed out');
-        return { success: false, error: 'Request timed out' };
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        provider: 'OpenRouter'
+      };
+    }
+  }
+
+  private static async callGemini(prompt: string): Promise<AIResponse> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${this.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000,
+          }
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        data: data.candidates?.[0]?.content?.parts?.[0]?.text,
+        provider: 'Gemini'
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        provider: 'Gemini'
+      };
+    }
+  }
+
+  private static parseAIResponse(
+    responseText: string,
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string
+  ): GameChallenge | null {
+    try {
+      // Clean the response text
+      let cleanedText = responseText.trim();
+      
+      // Remove markdown code blocks if present
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
       
-      console.error('❌ Gemini API call failed:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      // Remove any leading/trailing text that's not JSON
+      const jsonStart = cleanedText.indexOf('{');
+      const jsonEnd = cleanedText.lastIndexOf('}');
+      
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        cleanedText = cleanedText.substring(jsonStart, jsonEnd + 1);
+      }
+      
+      // Clean control characters and fix common JSON issues
+      cleanedText = cleanedText
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+        .replace(/\n/g, '\\n') // Escape newlines
+        .replace(/\r/g, '\\r') // Escape carriage returns
+        .replace(/\t/g, '\\t') // Escape tabs
+        .replace(/"/g, '"') // Fix smart quotes
+        .replace(/"/g, '"') // Fix smart quotes
+        .replace(/'/g, "'") // Fix smart quotes
+        .replace(/'/g, "'"); // Fix smart quotes
+
+      console.log('🧹 Cleaned AI response for parsing');
+      
+      const parsed = JSON.parse(cleanedText);
+      
+      return {
+        id: `ai-${Date.now()}`,
+        title: parsed.title || `${category} Challenge`,
+        description: parsed.description || 'AI-generated challenge',
+        difficulty,
+        category,
+        hints: Array.isArray(parsed.hints) ? parsed.hints : ['Think step by step'],
+        solution: parsed.solution || '// Solution not provided',
+        explanation: parsed.explanation || 'No explanation provided',
+        points: this.GAMING_CONFIG.POINTS[difficulty],
+        timeLimit: this.GAMING_CONFIG.TIME_LIMITS[difficulty],
+        perfectTime: this.GAMING_CONFIG.PERFECT_TIME[difficulty],
+      };
+    } catch (error) {
+      console.warn('Failed to parse AI response, trying manual extraction:', error);
+      return this.extractFieldsManually(responseText, difficulty, category);
+    }
+  }
+
+  private static extractFieldsManually(
+    responseText: string,
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string
+  ): GameChallenge | null {
+    try {
+      const extract = (field: string): string => {
+        const patterns = [
+          new RegExp(`"${field}"\\s*:\\s*"([^"]*)"`, 'i'),
+          new RegExp(`${field}\\s*:\\s*"([^"]*)"`, 'i'),
+          new RegExp(`"${field}"\\s*:\\s*'([^']*)'`, 'i'),
+        ];
+        
+        for (const pattern of patterns) {
+          const match = responseText.match(pattern);
+          if (match) return match[1];
+        }
+        return '';
+      };
+
+      const extractArray = (field: string): string[] => {
+        const pattern = new RegExp(`"${field}"\\s*:\\s*\\[([^\\]]*)\\]`, 'i');
+        const match = responseText.match(pattern);
+        if (match) {
+          return match[1]
+            .split(',')
+            .map(item => item.trim().replace(/['"]/g, ''))
+            .filter(item => item.length > 0);
+        }
+        return [];
+      };
+
+      const title = extract('title') || `${category} Challenge`;
+      const description = extract('description') || 'Challenge description';
+      const solution = extract('solution') || '// Solution code';
+      const explanation = extract('explanation') || 'Solution explanation';
+      const hints = extractArray('hints');
+
+      if (title && description) {
+        console.log('✅ Manual extraction successful');
+        return {
+          id: `ai-manual-${Date.now()}`,
+          title,
+          description,
+          difficulty,
+          category,
+          hints: hints.length > 0 ? hints : ['Think step by step', 'Consider edge cases'],
+          solution,
+          explanation,
+          points: this.GAMING_CONFIG.POINTS[difficulty],
+          timeLimit: this.GAMING_CONFIG.TIME_LIMITS[difficulty],
+          perfectTime: this.GAMING_CONFIG.PERFECT_TIME[difficulty],
+        };
+      }
+    } catch (error) {
+      console.error('Manual extraction failed:', error);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Load DSA dataset
+   */
+  private static async loadDSADataset(): Promise<DSADataset | null> {
+    if (this.dsaDataCache) {
+      return this.dsaDataCache;
+    }
+
+    try {
+      console.log('📚 Loading DSA dataset...');
+      const response = await fetch('/dsa.json');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      
+      // Validate the data structure
+      if (data && data.metadata && typeof data.metadata.total_questions === 'number') {
+        this.dsaDataCache = data;
+        console.log(`📚 DSA dataset loaded: ${data.metadata.total_questions} problems`);
+        return this.dsaDataCache;
+      } else {
+        throw new Error('Invalid DSA dataset structure');
+      }
+    } catch (error) {
+      console.error('Failed to load DSA dataset:', error);
+      return null;
     }
   }
 
   /**
-   * Create challenge generation prompt
+   * Get DSA challenge
    */
+  private static async getDSAChallenge(
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string
+  ): Promise<GameChallenge> {
+    const dataset = await this.loadDSADataset();
+    
+    if (dataset) {
+      const topic = this.mapCategoryToTopic(category);
+      const difficultyLevel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+      
+      console.log(`🔍 Searching for: Topic="${topic}", Difficulty="${difficultyLevel}"`);
+      
+      const problems = dataset.questions.filter(q => 
+        q.topic === topic && q.difficulty === difficultyLevel
+      );
+      
+      console.log(`📊 Found ${problems.length} problems matching criteria`);
+      
+      if (problems.length > 0) {
+        const problem = problems[Math.floor(Math.random() * problems.length)];
+        console.log(`✅ Selected problem: "${problem.question}" (${problem.topic}, ${problem.difficulty})`);
+        return this.createDSAChallenge(problem, difficulty, category);
+      } else {
+        // Try to find problems with the topic but any difficulty
+        const topicProblems = dataset.questions.filter(q => q.topic === topic);
+        console.log(`⚠️ No ${difficultyLevel} problems found for ${topic}. Found ${topicProblems.length} problems of any difficulty.`);
+        
+        if (topicProblems.length > 0) {
+          const problem = topicProblems[Math.floor(Math.random() * topicProblems.length)];
+          console.log(`🔄 Using ${problem.difficulty} problem instead: "${problem.question}"`);
+          return this.createDSAChallenge(problem, difficulty, category);
+        }
+      }
+    }
+
+    console.log(`❌ No DSA problems found, using fallback challenge`);
+    return this.createFallbackChallenge(difficulty, category);
+  }
+
+  private static mapCategoryToTopic(category: string): string {
+    // Convert category to lowercase and create multiple possible keys
+    const normalizedCategory = category.toLowerCase();
+    const keyWithSpaces = normalizedCategory.replace(/[^a-z\s&]/g, '');
+    const keyWithDashes = keyWithSpaces.replace(/\s+/g, '-');
+    const keyWithoutSpaces = keyWithSpaces.replace(/[\s&]/g, '');
+    
+    // Try different key formats
+    const possibleKeys = [
+      normalizedCategory,
+      keyWithSpaces,
+      keyWithDashes,
+      keyWithoutSpaces
+    ];
+    
+    for (const key of possibleKeys) {
+      if (this.CATEGORY_MAP[key]) {
+        console.log(`🎯 Mapped category "${category}" to topic "${this.CATEGORY_MAP[key]}"`);
+        return this.CATEGORY_MAP[key];
+      }
+    }
+    
+    console.warn(`⚠️ No mapping found for category "${category}", using Arrays as fallback`);
+    return 'Arrays';
+  }
+
+  private static createDSAChallenge(
+    problem: DSAProblem,
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string
+  ): GameChallenge {
+    const formattedDescription = `**Problem Statement:**
+${problem.question}
+
+**Example 1:**
+Input: [Please refer to the problem link for specific examples]
+Output: [Expected output format]
+Explanation: [Detailed explanation of the approach]
+
+**Example 2:**
+Input: [Additional test case]
+Output: [Expected output]
+Explanation: [Step-by-step breakdown]
+
+**Constraints:**
+- Follow the problem constraints as specified in the reference
+- Consider edge cases and boundary conditions
+- Optimize for time and space complexity
+
+**Companies:** ${problem.companies.slice(0, 5).join(', ')}${problem.companies.length > 5 ? ` and ${problem.companies.length - 5} more` : ''}
+
+**Reference:** [View detailed examples and constraints](${problem.link})
+
+**Difficulty:** ${problem.difficulty} | **Topic:** ${problem.topic}`;
+
+    return {
+      id: `dsa-${problem.id}`,
+      title: problem.question,
+      description: formattedDescription,
+      difficulty,
+      category,
+      hints: [
+        'Break down the problem into smaller steps',
+        'Consider the time and space complexity',
+        'Think about edge cases and constraints',
+        'Look at the pattern and try to identify the optimal approach'
+      ],
+      solution: `// ${problem.difficulty} level ${problem.topic} problem
+// Asked by: ${problem.companies.slice(0, 3).join(', ')}
+// Reference: ${problem.link}
+
+function solution() {
+    // Implement your solution here
+    // Consider the time and space complexity
+    
+    return result;
+}
+
+// Time Complexity: O(?)
+// Space Complexity: O(?)`,
+      explanation: `This is a ${problem.difficulty} level problem from the ${problem.topic} category. It has been frequently asked by top companies including ${problem.companies.slice(0, 3).join(', ')}. 
+
+Key approaches to consider:
+1. Understand the problem requirements clearly
+2. Identify the optimal data structure and algorithm
+3. Consider edge cases and constraints
+4. Optimize for both time and space complexity
+
+For detailed examples, test cases, and multiple solution approaches, visit the reference link.`,
+      points: this.GAMING_CONFIG.POINTS[difficulty],
+      timeLimit: this.GAMING_CONFIG.TIME_LIMITS[difficulty],
+      perfectTime: this.GAMING_CONFIG.PERFECT_TIME[difficulty],
+      companies: problem.companies,
+      problemLink: problem.link,
+    };
+  }
+
+  private static createFallbackChallenge(
+    difficulty: 'easy' | 'medium' | 'hard',
+    category: string
+  ): GameChallenge {
+    // Define the type for fallback problems structure
+    type FallbackProblemsType = {
+      [key: string]: {
+        easy: {
+          title: string;
+          description: string;
+          solution: string;
+        };
+        medium: {
+          title: string;
+          description: string;
+          solution: string;
+        };
+        hard: {
+          title: string;
+          description: string;
+          solution: string;
+        };
+      };
+    };
+
+    const fallbackProblems: FallbackProblemsType = {
+      'Arrays': {
+        easy: {
+          title: 'Two Sum',
+          description: `**Problem Statement:**
+Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.
+
+**Example 1:**
+Input: nums = [2,7,11,15], target = 9
+Output: [0,1]
+Explanation: Because nums[0] + nums[1] == 9, we return [0, 1].
+
+**Example 2:**
+Input: nums = [3,2,4], target = 6
+Output: [1,2]
+Explanation: nums[1] + nums[2] == 6, so we return [1, 2].
+
+**Constraints:**
+- 2 ≤ nums.length ≤ 10⁴
+- -10⁹ ≤ nums[i] ≤ 10⁹
+- -10⁹ ≤ target ≤ 10⁹
+- Only one valid answer exists.
+
+**Follow-up:** Can you come up with an algorithm that is less than O(n²) time complexity?`,
+          solution: `function twoSum(nums, target) {
+    const map = new Map();
+    
+    for (let i = 0; i < nums.length; i++) {
+        const complement = target - nums[i];
+        
+        if (map.has(complement)) {
+            return [map.get(complement), i];
+        }
+        
+        map.set(nums[i], i);
+    }
+    
+    return [];
+}
+
+// Time Complexity: O(n)
+// Space Complexity: O(n)`
+        },
+        medium: {
+          title: 'Maximum Subarray',
+          description: `**Problem Statement:**
+Given an integer array nums, find the contiguous subarray (containing at least one number) which has the largest sum and return its sum.
+
+**Example 1:**
+Input: nums = [-2,1,-3,4,-1,2,1,-5,4]
+Output: 6
+Explanation: [4,-1,2,1] has the largest sum = 6.
+
+**Example 2:**
+Input: nums = [1]
+Output: 1
+
+**Example 3:**
+Input: nums = [5,4,-1,7,8]
+Output: 23
+
+**Constraints:**
+- 1 ≤ nums.length ≤ 10⁵
+- -10⁴ ≤ nums[i] ≤ 10⁴
+
+**Follow-up:** If you have figured out the O(n) solution, try coding another solution using the divide and conquer approach.`,
+          solution: `function maxSubArray(nums) {
+    let maxSum = nums[0];
+    let currentSum = nums[0];
+    
+    for (let i = 1; i < nums.length; i++) {
+        currentSum = Math.max(nums[i], currentSum + nums[i]);
+        maxSum = Math.max(maxSum, currentSum);
+    }
+    
+    return maxSum;
+}
+
+// Time Complexity: O(n)
+// Space Complexity: O(1)`
+        },
+        hard: {
+          title: 'Median of Two Sorted Arrays',
+          description: `**Problem Statement:**
+Given two sorted arrays nums1 and nums2 of size m and n respectively, return the median of the two sorted arrays.
+
+**Example 1:**
+Input: nums1 = [1,3], nums2 = [2]
+Output: 2.00000
+Explanation: merged array = [1,2,3] and median is 2.
+
+**Example 2:**
+Input: nums1 = [1,2], nums2 = [3,4]
+Output: 2.50000
+Explanation: merged array = [1,2,3,4] and median is (2 + 3) / 2 = 2.5.
+
+**Constraints:**
+- nums1.length == m
+- nums2.length == n
+- 0 ≤ m ≤ 1000
+- 0 ≤ n ≤ 1000
+- 1 ≤ m + n ≤ 2000
+- -10⁶ ≤ nums1[i], nums2[i] ≤ 10⁶
+
+**Follow-up:** The overall run time complexity should be O(log (m+n)).`,
+          solution: `function findMedianSortedArrays(nums1, nums2) {
+    if (nums1.length > nums2.length) {
+        [nums1, nums2] = [nums2, nums1];
+    }
+    
+    const m = nums1.length;
+    const n = nums2.length;
+    let low = 0, high = m;
+    
+    while (low <= high) {
+        const cut1 = Math.floor((low + high) / 2);
+        const cut2 = Math.floor((m + n + 1) / 2) - cut1;
+        
+        const left1 = cut1 === 0 ? -Infinity : nums1[cut1 - 1];
+        const left2 = cut2 === 0 ? -Infinity : nums2[cut2 - 1];
+        const right1 = cut1 === m ? Infinity : nums1[cut1];
+        const right2 = cut2 === n ? Infinity : nums2[cut2];
+        
+        if (left1 <= right2 && left2 <= right1) {
+            if ((m + n) % 2 === 1) {
+                return Math.max(left1, left2);
+            } else {
+                return (Math.max(left1, left2) + Math.min(right1, right2)) / 2;
+            }
+        } else if (left1 > right2) {
+            high = cut1 - 1;
+        } else {
+            low = cut1 + 1;
+        }
+    }
+    
+    return 1.0;
+}
+
+// Time Complexity: O(log(min(m, n)))
+// Space Complexity: O(1)`
+        }
+      }
+    };
+
+    const categoryProblems = fallbackProblems[category] || fallbackProblems['Arrays'];
+    const problemData = categoryProblems[difficulty] || categoryProblems['easy'];
+
+    return {
+      id: `fallback-${Date.now()}`,
+      title: problemData.title,
+      description: problemData.description,
+      difficulty,
+      category,
+      hints: [
+        'Start with a brute force approach',
+        'Think about optimizing time complexity',
+        'Consider edge cases and constraints',
+        'Look for patterns in the examples'
+      ],
+      solution: problemData.solution,
+      explanation: `This is a classic ${category} problem that helps you practice fundamental algorithms and data structures. Focus on understanding the approach and optimizing your solution.`,
+      points: this.GAMING_CONFIG.POINTS[difficulty],
+      timeLimit: this.GAMING_CONFIG.TIME_LIMITS[difficulty],
+      perfectTime: this.GAMING_CONFIG.PERFECT_TIME[difficulty],
+    };
+  }
+
   private static createChallengePrompt(
     difficulty: string,
     category: string,
-    userLevel: number
+    _userLevel: number
   ): string {
-    return `
-      Create a ${difficulty} level coding challenge for the topic: ${category}
-      Target audience: DSA beginners (level ${userLevel})
-      
-      Generate a JSON response with the following structure:
-      {
-        "title": "Challenge title",
-        "description": "Clear problem description with examples",
-        "hints": ["hint1", "hint2", "hint3"],
-        "solution": "Sample solution code",
-        "explanation": "Step-by-step explanation of the solution",
-        "timeLimit": 300
-      }
-      
-      Requirements:
-      - Make it educational and engaging
-      - Include 2-3 helpful hints
-      - Provide a clear, commented solution
-      - Explanation should teach the concept
-      - Time limit appropriate for difficulty level
-      
-      Return only valid JSON.
-    `;
+    return `Create a ${difficulty} level coding challenge for ${category}.
+
+Generate a JSON response with this exact structure:
+{
+  "title": "Specific challenge title related to ${category}",
+  "description": "**Problem Statement:**\nClear problem description\n\n**Example 1:**\nInput: [example input]\nOutput: [example output]\nExplanation: Brief explanation\n\n**Example 2:**\nInput: [example input]\nOutput: [example output]\nExplanation: Brief explanation\n\n**Constraints:**\n- Constraint 1\n- Constraint 2\n- Constraint 3\n\n**Follow-up:** Optional follow-up question",
+  "hints": ["hint1", "hint2", "hint3"],
+  "solution": "Complete working solution code with comments",
+  "explanation": "Detailed explanation of approach and complexity"
+}
+
+STRICT REQUIREMENTS:
+- Problem MUST be specifically about ${category}
+- Difficulty MUST match ${difficulty} level complexity
+- Format description EXACTLY like LeetCode with sections, examples, and constraints
+- Include 2-3 concrete input/output examples with explanations
+- Add proper constraints section
+- Solution must be complete and runnable
+- Return ONLY valid JSON, no additional text.`;
   }
 
   /**
-   * Parse AI response into GameChallenge
+   * Evaluate solution with comprehensive detailed analysis
    */
-  private static parseAIResponse(
-    data: any,
-    difficulty: string,
-    category: string
-  ): GameChallenge {
-    try {
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error('No text in response');
-
-      // Extract JSON from response
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found in response');
-
-      const parsed = JSON.parse(jsonMatch[0]);
-      
-      return {
-        id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        title: parsed.title || 'AI Generated Challenge',
-        description: parsed.description || 'Solve this coding challenge',
-        difficulty: difficulty as 'easy' | 'medium' | 'hard',
-        category,
-        hints: Array.isArray(parsed.hints) ? parsed.hints : ['Think step by step', 'Consider edge cases'],
-        solution: parsed.solution || '// Solution code here',
-        explanation: parsed.explanation || 'This solution works by...',
-        points: this.getPointsForDifficulty(difficulty),
-        timeLimit: parsed.timeLimit || this.getTimeLimitForDifficulty(difficulty),
-        perfectTime: this.getPerfectTime(difficulty as 'easy' | 'medium' | 'hard')
-      };
-    } catch (error) {
-      console.error('Error parsing AI response:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get fallback challenge when AI fails
-   */
-  private static getFallbackChallenge(
-    difficulty: string,
-    category: string
-  ): GameChallenge {
-    const fallbackChallenges = {
-      easy: {
-        title: 'Find Maximum Element',
-        description: 'Write a function to find the maximum element in an array of integers.',
-        hints: ['Iterate through the array', 'Keep track of the maximum value seen so far', 'Update maximum when you find a larger value'],
-        solution: 'function findMax(arr) {\n  let max = arr[0];\n  for (let i = 1; i < arr.length; i++) {\n    if (arr[i] > max) max = arr[i];\n  }\n  return max;\n}',
-        explanation: 'We iterate through the array once, keeping track of the maximum value. Time complexity: O(n), Space complexity: O(1).'
-      },
-      medium: {
-        title: 'Two Sum Problem',
-        description: 'Given an array of integers and a target sum, find two numbers that add up to the target.',
-        hints: ['Use a hash map for O(n) solution', 'Store complement values', 'Check if current number\'s complement exists'],
-        solution: 'function twoSum(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (map.has(complement)) {\n      return [map.get(complement), i];\n    }\n    map.set(nums[i], i);\n  }\n  return [];\n}',
-        explanation: 'We use a hash map to store numbers and their indices. For each number, we check if its complement exists in the map.'
-      },
-      hard: {
-        title: 'Longest Palindromic Substring',
-        description: 'Find the longest palindromic substring in a given string.',
-        hints: ['Expand around centers', 'Consider both odd and even length palindromes', 'Use dynamic programming approach'],
-        solution: 'function longestPalindrome(s) {\n  let start = 0, maxLen = 1;\n  \n  function expandAroundCenter(left, right) {\n    while (left >= 0 && right < s.length && s[left] === s[right]) {\n      const len = right - left + 1;\n      if (len > maxLen) {\n        start = left;\n        maxLen = len;\n      }\n      left--;\n      right++;\n    }\n  }\n  \n  for (let i = 0; i < s.length; i++) {\n    expandAroundCenter(i, i);\n    expandAroundCenter(i, i + 1);\n  }\n  \n  return s.substring(start, start + maxLen);\n}',
-        explanation: 'We expand around each possible center (both single characters and between characters) to find palindromes.'
-      }
-    };
-
-    const challenge = fallbackChallenges[difficulty as keyof typeof fallbackChallenges];
-    
-    return {
-      id: `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      title: challenge.title,
-      description: challenge.description,
-      difficulty: difficulty as 'easy' | 'medium' | 'hard',
-      category,
-      hints: challenge.hints,
-      solution: challenge.solution,
-      explanation: challenge.explanation,
-      points: this.getPointsForDifficulty(difficulty),
-      timeLimit: this.getTimeLimitForDifficulty(difficulty),
-      perfectTime: this.getPerfectTime(difficulty as 'easy' | 'medium' | 'hard')
-    };
-  }
-
-  /**
-   * Get points based on difficulty
-   */
-  private static getPointsForDifficulty(difficulty: string): number {
-    switch (difficulty) {
-      case 'easy': return 100;
-      case 'medium': return 250;
-      case 'hard': return 500;
-      default: return 100;
-    }
-  }
-
-  /**
-   * Get time limit based on difficulty (aligned with DSA project guidelines)
-   */
-  private static getTimeLimitForDifficulty(difficulty: string): number {
-    switch (difficulty) {
-      case 'easy': return 600; // 10 minutes (upper bound of 5-10 mins range)
-      case 'medium': return 1200; // 20 minutes (upper bound of 15-20 mins range)
-      case 'hard': return 3600; // 60 minutes (upper bound of 40-60 mins range)
-      default: return 600;
-    }
-  }
-
-  /**
-   * Get default learning path
-   */
-  private static getDefaultLearningPath(): string[] {
-    return [
-      'Arrays and Basic Operations',
-      'String Manipulation Techniques',
-      'Introduction to Recursion',
-      'Stack and Queue Fundamentals',
-      'Basic Sorting Algorithms'
-    ];
-  }
-
-  /**
-   * Get available game categories
-   */
-  static getGameCategories(): string[] {
-    return [...this.GAME_CATEGORIES];
-  }
-
-  /**
-   * Validate user solution using AI or basic checks
-   */
-  static async validateSolution(
+  static async evaluateSolution(
     challenge: GameChallenge,
-    userCode: string
-  ): Promise<{
-    isCorrect: boolean;
-    feedback: string;
-    score: number;
-    suggestions?: string[];
-  }> {
-    console.log('🔍 Validating solution for:', challenge.title);
+    userSolution: string,
+    timeSpent: number,
+    hintsUsed: number = 0
+  ): Promise<SolutionEvaluation> {
+    console.log('🔍 Starting comprehensive AI evaluation with detailed analysis...');
     
-    // Basic validation checks
-    if (!userCode.trim()) {
-      return {
-        isCorrect: false,
-        feedback: "No solution provided. Please write your code before submitting.",
-        score: 0,
-        suggestions: ["Write a function that solves the problem", "Start with the basic algorithm structure"]
-      };
-    }
-
-    // Check for basic syntax and structure
-    const basicChecks = this.performBasicValidation(userCode, challenge);
-    if (!basicChecks.isValid) {
-      return {
-        isCorrect: false,
-        feedback: basicChecks.feedback,
-        score: 0,
-        suggestions: basicChecks.suggestions
-      };
-    }
-
-    // Try AI validation first
     try {
-      const aiValidation = await this.validateWithAI(challenge, userCode);
-      if (aiValidation) {
-        return aiValidation;
-      }
-    } catch (error) {
-      console.warn('⚠️ AI validation failed, using fallback validation');
-    }
-
-    // Fallback to pattern-based validation
-    return this.performPatternValidation(challenge, userCode);
-  }
-
-  /**
-   * Perform basic code validation
-   */
-  private static performBasicValidation(userCode: string, challenge: GameChallenge): {
-    isValid: boolean;
-    feedback: string;
-    suggestions: string[];
-  } {
-    const code = userCode.toLowerCase().trim();
-    
-    // Check for minimum code length
-    if (code.length < 20) {
-      return {
-        isValid: false,
-        feedback: "Solution seems too short. Please provide a more complete implementation.",
-        suggestions: [
-          "Add proper function structure",
-          "Include variable declarations",
-          "Add logic to solve the problem"
-        ]
-      };
-    }
-
-    // Check for common programming constructs based on difficulty
-    const hasFunction = /function|def|=>|class/.test(code);
-    const hasLoop = /for|while|foreach|map|reduce|filter/.test(code);
-    const hasConditional = /if|else|switch|case|\?/.test(code);
-    const hasReturn = /return/.test(code);
-
-    if (challenge.difficulty === 'easy') {
-      if (!hasFunction && !hasReturn) {
-        return {
-          isValid: false,
-          feedback: "Your solution should include a function that returns a result.",
-          suggestions: [
-            "Create a function to solve the problem",
-            "Make sure to return the result",
-            "Use proper function syntax"
-          ]
-        };
-      }
-    } else if (challenge.difficulty === 'medium' || challenge.difficulty === 'hard') {
-      if (!hasFunction || (!hasLoop && !hasConditional)) {
-        return {
-          isValid: false,
-          feedback: "Your solution should include proper logic structure with loops or conditionals.",
-          suggestions: [
-            "Add loops for iteration if needed",
-            "Use conditional statements for decision making",
-            "Ensure your algorithm handles all cases"
-          ]
-        };
-      }
-    }
-
-    return { isValid: true, feedback: "", suggestions: [] };
-  }
-
-  /**
-   * Validate solution using AI
-   */
-  private static async validateWithAI(challenge: GameChallenge, userCode: string): Promise<{
-    isCorrect: boolean;
-    feedback: string;
-    score: number;
-    suggestions?: string[];
-  } | null> {
-    try {
-      const prompt = `
-        Problem: ${challenge.title}
-        Description: ${challenge.description}
-        Expected Solution: ${challenge.solution}
-        User's Solution: ${userCode}
-        
-        Analyze the user's solution and provide:
-        1. Is it correct? (true/false)
-        2. Detailed feedback on the approach
-        3. Score out of 100 (0 if incorrect, 60-100 if correct based on quality)
-        4. Specific suggestions for improvement
-        
-        Respond in JSON format:
-        {
-          "isCorrect": boolean,
-          "feedback": "detailed feedback",
-          "score": number,
-          "suggestions": ["suggestion1", "suggestion2"]
-        }
-      `;
-
-      const response = await this.callGeminiAPI(prompt);
+      // Perform code complexity analysis first
+      const complexityAnalysis = this.analyzeCodeComplexity(userSolution);
+      const performanceAnalysis = this.analyzePerformance(userSolution, challenge.difficulty);
+      const plagiarismCheck = this.checkCommonPatterns(userSolution, challenge.title);
       
-      if (response.success && response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const text = response.data.candidates[0].content.parts[0].text.trim();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        
-        if (jsonMatch) {
-          const result = JSON.parse(jsonMatch[0]);
-          return {
-            isCorrect: result.isCorrect || false,
-            feedback: result.feedback || "Solution analyzed by AI",
-            score: result.score || 0,
-            suggestions: result.suggestions || []
-          };
+      const prompt = `You are a SENIOR TECHNICAL INTERVIEWER at a top tech company (Google/Meta/Amazon level). 
+Provide an EXTREMELY DETAILED, LINE-BY-LINE analysis of this coding solution with professional-grade feedback.
+
+CHALLENGE: ${challenge.title}
+DIFFICULTY: ${challenge.difficulty}
+DESCRIPTION: ${challenge.description}
+
+USER SOLUTION:
+${userSolution}
+
+PERFORMANCE METRICS:
+- Time Spent: ${timeSpent}s (Limit: ${challenge.timeLimit}s)
+- Hints Used: ${hintsUsed}
+- Code Complexity Score: ${complexityAnalysis.score}/100
+- Cyclomatic Complexity: ${complexityAnalysis.cyclomaticComplexity}
+- Performance Rating: ${performanceAnalysis.rating}
+- Pattern Similarity: ${plagiarismCheck.similarity}%
+
+REQUIRED ANALYSIS DEPTH:
+1. LINE-BY-LINE CODE REVIEW: Analyze each significant line, identify specific issues
+2. ALGORITHM ANALYSIS: Detailed time/space complexity with mathematical proof
+3. CODE QUALITY ASSESSMENT: Variable naming, structure, readability, maintainability
+4. EDGE CASE COVERAGE: Specific test cases that would break the solution
+5. PERFORMANCE BOTTLENECKS: Exact lines causing performance issues
+6. OPTIMIZATION OPPORTUNITIES: Specific code improvements with line numbers
+
+EVALUATION CRITERIA (Weighted):
+- CORRECTNESS (40%): Functional correctness with specific test case analysis
+- ALGORITHM EFFICIENCY (30%): Time/space complexity optimization
+- CODE QUALITY (20%): Professional coding standards
+- EDGE CASE HANDLING (10%): Robustness and error handling
+
+SCORING STANDARDS (EXTREMELY HARSH - Real Interview Level):
+- 95-100: Perfect solution, optimal algorithm, production-ready code
+- 85-94: Excellent solution with minor optimizations possible
+- 75-84: Good solution but has clear improvement areas
+- 65-74: Working solution with significant algorithmic or quality issues
+- 50-64: Partially working with major flaws
+- 0-49: Incorrect or fundamentally broken solution
+
+PENALTIES (Applied Automatically):
+- Each hint: -10 points
+- Time overrun: -15 points
+- Poor naming: -5 points per violation
+- Missing edge cases: -10 points per case
+- Suboptimal complexity: -15 points
+- Code duplication: -5 points
+- No comments: -5 points
+- Magic numbers: -3 points each
+
+RESPOND WITH DETAILED JSON:
+{
+  "isCorrect": boolean,
+  "score": number (0-100, be extremely harsh),
+  "feedback": "DETAILED multi-paragraph professional feedback with specific line references",
+  "suggestions": ["Specific improvements with line numbers and exact changes"],
+  "timeComplexity": "O(...) with mathematical explanation",
+  "spaceComplexity": "O(...) with memory usage breakdown",
+  "lineByLineAnalysis": [
+    {"line": number, "code": "actual code", "issue": "specific problem", "severity": "high/medium/low", "suggestion": "exact fix"}
+  ],
+  "codeQualityMetrics": {
+    "cyclomaticComplexity": number,
+    "maintainabilityIndex": number,
+    "duplicatedLines": number,
+    "codeSmells": ["specific issues"],
+    "namingConventions": "score/10"
+  },
+  "performanceAnalysis": {
+    "bottlenecks": ["specific performance issues with line numbers"],
+    "optimizationOpportunities": ["exact optimizations possible"],
+    "memoryUsage": "detailed analysis",
+    "runtimePrediction": "expected performance on large inputs"
+  },
+  "edgeCaseAnalysis": {
+    "coveredCases": ["cases the solution handles"],
+    "missedCases": ["specific test cases that would fail"],
+    "testCaseRecommendations": ["exact test cases to add"]
+  },
+  "interviewFeedback": {
+    "strengths": ["specific positive aspects"],
+    "weaknesses": ["specific areas needing improvement"],
+    "nextSteps": ["what to study/practice next"],
+    "industryReadiness": "percentage ready for production"
+  },
+  "reasoning": "Detailed explanation of score calculation with breakdown"
+}`;
+
+      console.log('🤖 Attempting AI evaluation with professional standards...');
+
+      // Try OpenRouter first
+      if (this.OPENROUTER_API_KEY) {
+        const response = await this.callOpenRouter(prompt);
+        if (response.success && response.data) {
+          try {
+            const evaluation = JSON.parse(response.data);
+            console.log('✅ AI evaluation successful:', evaluation);
+            
+            // Apply additional realistic penalties
+            let finalScore = evaluation.score || 0;
+            finalScore -= (hintsUsed * 10); // Harsh hint penalty
+            if (timeSpent > challenge.timeLimit) {
+              finalScore -= 15; // Time penalty
+            }
+            finalScore = Math.max(finalScore, 0); // Don't go below 0
+            
+            return {
+              isCorrect: evaluation.isCorrect && finalScore >= 70,
+              score: Math.round(finalScore),
+              feedback: evaluation.feedback || 'No detailed feedback available',
+              suggestions: evaluation.suggestions || ['Review the solution approach', 'Practice similar problems'],
+              timeComplexity: evaluation.timeComplexity,
+              spaceComplexity: evaluation.spaceComplexity,
+            };
+          } catch (parseError) {
+            console.warn('❌ Failed to parse AI evaluation, trying manual extraction...');
+            return this.extractEvaluationFieldsManually(response.data, hintsUsed, timeSpent, challenge.timeLimit);
+          }
         }
       }
-      
-      return null;
+
+      // Try Gemini as fallback
+      if (this.GEMINI_API_KEY) {
+        console.log('🔄 Trying Gemini as fallback...');
+        const response = await this.callGemini(prompt);
+        if (response.success && response.data) {
+          try {
+            const evaluation = JSON.parse(response.data);
+            console.log('✅ Gemini evaluation successful:', evaluation);
+            
+            let finalScore = evaluation.score || 0;
+            finalScore -= (hintsUsed * 10);
+            if (timeSpent > challenge.timeLimit) {
+              finalScore -= 15;
+            }
+            finalScore = Math.max(finalScore, 0);
+            
+            return {
+              isCorrect: evaluation.isCorrect && finalScore >= 70,
+              score: Math.round(finalScore),
+              feedback: evaluation.feedback || 'No detailed feedback available',
+              suggestions: evaluation.suggestions || ['Review the solution approach', 'Practice similar problems'],
+              timeComplexity: evaluation.timeComplexity,
+              spaceComplexity: evaluation.spaceComplexity,
+            };
+          } catch (parseError) {
+            console.warn('❌ Failed to parse Gemini evaluation, trying manual extraction...');
+            return this.extractEvaluationFieldsManually(response.data, hintsUsed, timeSpent, challenge.timeLimit);
+          }
+        }
+      }
+
+      // Enhanced fallback evaluation
+      console.log('⚠️ AI evaluation failed, using enhanced fallback...');
+      return this.realisticBasicEvaluation(userSolution, timeSpent, challenge.timeLimit, hintsUsed, challenge.difficulty);
     } catch (error) {
-      console.error('❌ AI validation error:', error);
-      return null;
+      console.error('❌ Solution evaluation failed:', error);
+      return this.realisticBasicEvaluation(userSolution, timeSpent, challenge.timeLimit, hintsUsed, challenge.difficulty);
+    }
+  }
+
+  private static extractEvaluationFieldsManually(
+    responseText: string,
+    hintsUsed: number,
+    timeSpent: number,
+    timeLimit: number
+  ): SolutionEvaluation {
+    console.log('🔧 Attempting manual field extraction from AI response...');
+    
+    try {
+      // Extract fields using regex patterns
+      const isCorrectMatch = responseText.match(/"isCorrect":\s*(true|false)/i);
+      const scoreMatch = responseText.match(/"score":\s*(\d+)/);
+      const feedbackMatch = responseText.match(/"feedback":\s*"([^"]+)"/);
+      const suggestionsMatch = responseText.match(/"suggestions":\s*\[(.*?)\]/s);
+      
+      const isCorrect = isCorrectMatch ? isCorrectMatch[1].toLowerCase() === 'true' : false;
+      let score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
+      const feedback = feedbackMatch ? feedbackMatch[1] : 'AI evaluation completed with manual parsing.';
+      
+      // Parse suggestions array
+      let suggestions: string[] = ['Review the solution approach', 'Practice similar problems'];
+      if (suggestionsMatch) {
+        try {
+          const suggestionsStr = suggestionsMatch[1];
+          const suggestionMatches = suggestionsStr.match(/"([^"]+)"/g);
+          if (suggestionMatches) {
+            suggestions = suggestionMatches.map(s => s.replace(/"/g, ''));
+          }
+        } catch (e) {
+          console.warn('Failed to parse suggestions, using defaults');
+        }
+      }
+      
+      // Apply realistic penalties
+      score -= (hintsUsed * 10);
+      if (timeSpent > timeLimit) {
+        score -= 15;
+      }
+      score = Math.max(score, 0);
+      
+      console.log('✅ Manual extraction successful:', { isCorrect, score, feedback });
+      
+      return {
+        isCorrect: isCorrect && score >= 70,
+        score: Math.round(score),
+        feedback,
+        suggestions,
+        timeComplexity: 'Not analyzed',
+        spaceComplexity: 'Not analyzed',
+      };
+    } catch (error) {
+      console.error('❌ Manual extraction failed:', error);
+      return this.realisticBasicEvaluation('', timeSpent, timeLimit, hintsUsed, 'medium');
     }
   }
 
   /**
-   * Pattern-based validation for common problems
+   * Realistic basic evaluation with professional standards
    */
-  private static performPatternValidation(challenge: GameChallenge, userCode: string): {
-    isCorrect: boolean;
-    feedback: string;
-    score: number;
-    suggestions?: string[];
-  } {
-    const code = userCode.toLowerCase();
-    const title = challenge.title.toLowerCase();
-    
-    // Array problems - more strict validation
-    if (title.includes('array') || title.includes('maximum') || title.includes('minimum')) {
-      if (code.includes('math.max') || code.includes('math.min') || 
-          code.includes('for') || code.includes('reduce')) {
-        return {
-          isCorrect: false, // Changed to false - pattern matching isn't enough for correctness
-          feedback: "Your solution shows understanding of array methods, but may not be fully correct. Please verify your logic.",
-          score: 50, // Reduced score for partial understanding
-          suggestions: ["Test your solution with the given examples", "Consider edge cases like empty arrays", "Verify your algorithm logic"]
-        };
-      }
-    }
-    
-    // String problems - more strict validation
-    if (title.includes('string') || title.includes('palindrome') || title.includes('substring')) {
-      if (code.includes('length') || code.includes('substring') || 
-          code.includes('split') || code.includes('reverse')) {
-        return {
-          isCorrect: false, // Changed to false - pattern matching isn't enough
-          feedback: "Your solution uses string methods, but may not solve the problem correctly. Review your approach.",
-          score: 50, // Reduced score
-          suggestions: ["Test with the provided examples", "Check for case sensitivity", "Verify your string manipulation logic"]
-        };
-      }
-    }
-    
-    // Two pointer or search problems - more strict validation
-    if (title.includes('two') || title.includes('sum') || title.includes('search')) {
-      if (code.includes('map') || code.includes('set') || 
-          code.includes('left') || code.includes('right')) {
-        return {
-          isCorrect: false, // Changed to false - using data structures doesn't guarantee correctness
-          feedback: "You're using appropriate data structures, but the solution may not be complete or correct.",
-          score: 60, // Partial credit for good approach
-          suggestions: ["Verify your algorithm implementation", "Test with edge cases", "Check if your solution handles all requirements"]
-        };
-      }
-    }
-
-    // Default case - give partial credit for effort
-    return {
-      isCorrect: false,
-      feedback: "Your solution shows effort, but it may not fully solve the problem. Review the requirements and try a different approach.",
-      score: 25, // Partial credit for attempting
-      suggestions: [
-        "Review the problem statement carefully",
-        "Break down the problem into smaller steps",
-        "Consider using the hints provided",
-        "Look at similar problems for inspiration"
-      ]
-    };
-  }
-
-  /**
-   * Calculate score based on performance and correctness
-   */
-  static calculateScore(
-    basePoints: number,
+  private static realisticBasicEvaluation(
+    solution: string,
     timeSpent: number,
     timeLimit: number,
     hintsUsed: number,
-    completed: boolean,
-    isCorrect: boolean = true,
-    qualityScore: number = 100,
-    perfectTime?: number
-  ): number {
-    if (!completed) return 0;
-    if (!isCorrect) return Math.floor(basePoints * 0.25); // 25% for attempt
-
-    // Start with quality-adjusted base points
-    let score = Math.floor(basePoints * (qualityScore / 100));
+    difficulty: 'easy' | 'medium' | 'hard'
+  ): SolutionEvaluation {
+    console.log('🎯 Performing realistic basic evaluation...');
     
-    // Enhanced time bonus using perfect time
-    if (perfectTime) {
-      if (timeSpent <= perfectTime) {
-        // Perfect time bonus: up to 100% bonus for completing within perfect time
-        const perfectTimeBonus = Math.floor(score * 1.0);
-        score += perfectTimeBonus;
-      } else {
-        // Standard time bonus: up to 50% bonus based on remaining time
-        const timeRatio = Math.max(0, (timeLimit - timeSpent) / timeLimit);
-        const timeBonus = Math.floor(score * 0.5 * timeRatio);
-        score += timeBonus;
-      }
-    } else {
-      // Fallback to original time bonus calculation
-      const timeRatio = Math.max(0, (timeLimit - timeSpent) / timeLimit);
-      const timeBonus = Math.floor(score * 0.5 * timeRatio);
-      score += timeBonus;
-    }
+    // Code structure analysis
+    const hasCode = solution.trim().length > 20;
+    const hasFunction = /function|def|class|public|private|const\s+\w+\s*=/.test(solution);
+    const hasLogic = /if|for|while|return|switch/.test(solution);
+    const hasLoops = /for|while/.test(solution);
+    const hasConditionals = /if|switch/.test(solution);
+    const hasReturns = /return/.test(solution);
+    const hasVariables = /let|const|var|\w+\s*=/.test(solution);
     
-    // Hint penalty (10% reduction per hint used)
-    const hintPenalty = Math.floor(score * 0.1 * hintsUsed);
-    score -= hintPenalty;
+    // Code quality indicators
+    const hasComments = /\/\/|\/\*|\#/.test(solution);
+    const hasGoodNaming = !/\b[a-z]\b|\btemp\b|\bdata\b|\bvar\b/.test(solution);
+    const hasEdgeCases = /null|undefined|empty|length|0/.test(solution);
     
-    return Math.max(0, score);
-  }
-
-  /**
-   * Save game session to localStorage
-   */
-  static saveGameSession(session: GameSession): void {
-    try {
-      const sessions = this.getGameSessions();
-      sessions.push(session);
-      localStorage.setItem('dsa_game_sessions', JSON.stringify(sessions));
-    } catch (error) {
-      console.error('Error saving game session:', error);
-    }
-  }
-
-  /**
-   * Get all game sessions from localStorage
-   */
-  static getGameSessions(): GameSession[] {
-    try {
-      const sessions = localStorage.getItem('dsa_game_sessions');
-      return sessions ? JSON.parse(sessions) : [];
-    } catch (error) {
-      console.error('Error loading game sessions:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Get user's gaming statistics
-   */
-  static getGamingStats(userId: string): {
-    totalGames: number;
-    completedGames: number;
-    totalScore: number;
-    averageScore: number;
-    bestScore: number;
-    favoriteCategory: string;
-    totalTimeSpent: number;
-  } {
-    const sessions = this.getGameSessions().filter(s => s.userId === userId);
-    const completed = sessions.filter(s => s.completed);
+    // Calculate base score with realistic standards
+    let score = 0;
     
-    if (sessions.length === 0) {
-      return {
-        totalGames: 0,
-        completedGames: 0,
-        totalScore: 0,
-        averageScore: 0,
-        bestScore: 0,
-        favoriteCategory: 'Arrays',
-        totalTimeSpent: 0
-      };
-    }
-
-    const totalScore = completed.reduce((sum, s) => sum + s.score, 0);
-    const bestScore = Math.max(...completed.map(s => s.score), 0);
-    const totalTimeSpent = sessions.reduce((sum, s) => sum + s.timeSpent, 0);
-
-    // Find favorite category (most played)
-    const categoryCount: { [key: string]: number } = {};
-    sessions.forEach(session => {
-      // We'll need to get category from challenge - for now use a default
-      const category = 'Arrays'; // This would be fetched from challenge data
-      categoryCount[category] = (categoryCount[category] || 0) + 1;
-    });
-
-    const favoriteCategory = Object.keys(categoryCount).reduce((a, b) => 
-      categoryCount[a] > categoryCount[b] ? a : b, 'Arrays'
-    );
-
-    return {
-      totalGames: sessions.length,
-      completedGames: completed.length,
-      totalScore,
-      averageScore: completed.length > 0 ? Math.round(totalScore / completed.length) : 0,
-      bestScore,
-      favoriteCategory,
-      totalTimeSpent
+    // Basic implementation (40% max)
+    if (hasCode) score += 10;
+    if (hasFunction) score += 15;
+    if (hasLogic) score += 15;
+    
+    // Algorithm completeness (30% max)
+    if (hasLoops) score += 10;
+    if (hasConditionals) score += 10;
+    if (hasReturns) score += 10;
+    
+    // Code quality (20% max)
+    if (hasVariables) score += 5;
+    if (hasGoodNaming) score += 5;
+    if (hasComments) score += 5;
+    if (hasEdgeCases) score += 5;
+    
+    // Difficulty adjustment (harsh)
+    const difficultyPenalty = {
+      easy: 0,
+      medium: -10,
+      hard: -20
     };
+    score += difficultyPenalty[difficulty];
+    
+    // Realistic penalties
+    score -= (hintsUsed * 10); // Harsh hint penalty
+    if (timeSpent > timeLimit) {
+      score -= 15; // Time penalty
+    }
+    if (timeSpent > timeLimit * 1.5) {
+      score -= 10; // Additional penalty for significant overtime
+    }
+    
+    // Ensure realistic score range
+    score = Math.max(score, 0);
+    score = Math.min(score, 85); // Cap at 85 for basic evaluation
+    
+    // Determine correctness with high standards
+    const isCorrect = score >= 70 && hasFunction && hasLogic && hasReturns;
+    
+    // Generate realistic feedback
+    let feedback = '';
+    let suggestions: string[] = [];
+    
+    if (score >= 70) {
+      feedback = `Your solution demonstrates solid understanding of the problem. Score: ${score}/100. `;
+      if (hintsUsed > 0) {
+        feedback += `However, using ${hintsUsed} hint(s) reduced your score significantly. `;
+      }
+      if (timeSpent > timeLimit) {
+        feedback += `Time management could be improved (${Math.round(timeSpent)}s vs ${timeLimit}s limit). `;
+      }
+      suggestions = [
+        'Practice solving similar problems without hints',
+        'Focus on optimizing your time complexity',
+        'Consider edge cases and error handling'
+      ];
+    } else if (score >= 50) {
+      feedback = `Your solution shows partial understanding but needs significant improvement. Score: ${score}/100. `;
+      if (!hasFunction) feedback += 'Missing proper function structure. ';
+      if (!hasLogic) feedback += 'Incomplete algorithm implementation. ';
+      suggestions = [
+        'Review the problem requirements carefully',
+        'Implement complete algorithm logic',
+        'Test your solution with sample inputs',
+        'Practice basic programming constructs'
+      ];
+    } else {
+      feedback = `Your solution needs major improvements to meet professional standards. Score: ${score}/100. `;
+      feedback += 'Focus on implementing a complete, working solution first.';
+      suggestions = [
+        'Start with a working brute force solution',
+        'Break down the problem into smaller steps',
+        'Review similar solved examples',
+        'Practice fundamental programming concepts'
+      ];
+    }
+    
+    console.log(`📊 Basic evaluation complete: ${score}/100, Correct: ${isCorrect}`);
+    
+    // Get detailed analysis data
+    const complexityAnalysis = this.analyzeCodeComplexity(solution);
+    const performanceAnalysis = this.analyzePerformance(solution, difficulty);
+    const plagiarismCheck = this.checkCommonPatterns(solution, 'Challenge');
+    
+    return {
+      isCorrect,
+      score: Math.round(score),
+      feedback,
+      suggestions,
+      timeComplexity: 'Not analyzed',
+      spaceComplexity: 'Not analyzed',
+      lineByLineAnalysis: [
+        {
+          line: 1,
+          code: solution.split('\n')[0] || 'No code provided',
+          issue: score < 70 ? 'Solution needs improvement' : 'Code structure looks good',
+          severity: score < 50 ? 'high' as const : score < 70 ? 'medium' as const : 'low' as const,
+          suggestion: score < 70 ? 'Review algorithm logic and implementation' : 'Consider adding more comments for clarity'
+        }
+      ],
+      codeQualityMetrics: {
+        cyclomaticComplexity: complexityAnalysis.cyclomaticComplexity,
+        maintainabilityIndex: complexityAnalysis.maintainabilityIndex,
+        duplicatedLines: this.findDuplicatedCode(solution),
+        codeSmells: complexityAnalysis.codeSmells,
+        namingConventions: "7/10"
+      },
+      performanceAnalysis: {
+        bottlenecks: performanceAnalysis.bottlenecks,
+        optimizationOpportunities: performanceAnalysis.optimizationOpportunities,
+        memoryUsage: "Basic analysis - detailed profiling not available",
+        runtimePrediction: performanceAnalysis.expectedComplexity
+      },
+      edgeCaseAnalysis: {
+        coveredCases: ["Basic functionality"],
+        missedCases: score < 70 ? ["Empty input", "Large datasets", "Edge values"] : ["Advanced edge cases"],
+        testCaseRecommendations: [
+          "Test with empty input",
+          "Test with single element",
+          "Test with maximum constraints",
+          "Test with invalid input"
+        ]
+      },
+      interviewFeedback: {
+        strengths: score >= 70 ? ["Working solution", "Good problem understanding"] : ["Attempted solution"],
+        weaknesses: score < 70 ? ["Algorithm implementation", "Code structure", "Edge case handling"] : ["Minor optimizations possible"],
+        nextSteps: [
+          "Practice similar algorithmic problems",
+          "Focus on code optimization",
+          "Study time/space complexity analysis",
+          "Improve error handling"
+        ],
+        industryReadiness: `${Math.min(score + 10, 100)}% - ${score >= 80 ? 'Good progress' : score >= 60 ? 'Needs improvement' : 'Significant work needed'}`
+      },
+      reasoning: `Score: ${Math.round(score)}/100. Evaluation based on: correctness (${isCorrect ? 'PASS' : 'FAIL'}), code structure, hints used (${hintsUsed}), time management (${timeSpent}s/${timeLimit}s). ${hintsUsed > 0 ? `Hint penalty: -${hintsUsed * 10} points. ` : ''}${timeSpent > timeLimit ? `Time penalty: -15 points. ` : ''}Professional interview standards applied.`
+    };
+  }
+
+  /**
+   * Analyze code complexity with cyclomatic complexity scoring
+   */
+  private static analyzeCodeComplexity(code: string): {
+    score: number;
+    cyclomaticComplexity: number;
+    maintainabilityIndex: number;
+    codeSmells: string[];
+  } {
+    console.log('🔬 Analyzing code complexity...');
+    
+    // Calculate cyclomatic complexity
+    let cyclomaticComplexity = 1; // Base complexity
+    
+    // Handle word-boundary keywords
+    const wordKeywords = ['if', 'else', 'while', 'for', 'switch', 'case', 'catch'];
+    wordKeywords.forEach(keyword => {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'g');
+      const matches = code.match(regex);
+      if (matches) {
+        cyclomaticComplexity += matches.length;
+      }
+    });
+    
+    // Handle special operator keywords that don't need word boundaries
+    const operatorKeywords = [
+      { pattern: '&&', regex: /&&/g },
+      { pattern: '||', regex: /\|\|/g },
+      { pattern: '?', regex: /\?/g }
+    ];
+    operatorKeywords.forEach(({ regex }) => {
+      const matches = code.match(regex);
+      if (matches) {
+        cyclomaticComplexity += matches.length;
+      }
+    });
+    
+    // Analyze code smells
+    const codeSmells: string[] = [];
+    
+    // Long method detection
+    const lines = code.split('\n').filter(line => line.trim().length > 0);
+    if (lines.length > 50) {
+      codeSmells.push('Method too long (>50 lines)');
+    }
+    
+    // Magic numbers
+    const magicNumbers = code.match(/\b\d{2,}\b/g);
+    if (magicNumbers && magicNumbers.length > 2) {
+      codeSmells.push(`Magic numbers detected: ${magicNumbers.join(', ')}`);
+    }
+    
+    // Nested loops
+    const nestedLoopPattern = /for\s*\([^}]*for\s*\(|while\s*\([^}]*while\s*\(/g;
+    if (nestedLoopPattern.test(code)) {
+      codeSmells.push('Nested loops detected - potential O(n²) complexity');
+    }
+    
+    // Variable naming
+    const poorNaming = /\b[a-z]\b|\btemp\b|\bdata\b|\bvar\d+\b/g;
+    const poorNames = code.match(poorNaming);
+    if (poorNames && poorNames.length > 0) {
+      codeSmells.push(`Poor variable naming: ${poorNames.join(', ')}`);
+    }
+    
+    // Code duplication
+    const duplicatedLines = this.findDuplicatedCode(code);
+    if (duplicatedLines > 0) {
+      codeSmells.push(`${duplicatedLines} duplicated lines detected`);
+    }
+    
+    // Calculate maintainability index (simplified)
+    const maintainabilityIndex = Math.max(0, 100 - (cyclomaticComplexity * 2) - (codeSmells.length * 5));
+    
+    // Overall complexity score
+    const score = Math.max(0, 100 - (cyclomaticComplexity * 3) - (codeSmells.length * 8));
+    
+    return {
+      score: Math.round(score),
+      cyclomaticComplexity,
+      maintainabilityIndex: Math.round(maintainabilityIndex),
+      codeSmells
+    };
+  }
+
+  /**
+   * Analyze performance characteristics
+   */
+  private static analyzePerformance(code: string, difficulty: string): {
+    rating: string;
+    bottlenecks: string[];
+    optimizationOpportunities: string[];
+    expectedComplexity: string;
+  } {
+    console.log('⚡ Analyzing performance characteristics...');
+    
+    const bottlenecks: string[] = [];
+    const optimizationOpportunities: string[] = [];
+    
+    // Detect nested loops (O(n²) or worse)
+    if (/for\s*\([^}]*for\s*\(|while\s*\([^}]*while\s*\(/g.test(code)) {
+      bottlenecks.push('Nested loops detected - O(n²) time complexity');
+      optimizationOpportunities.push('Consider using hash maps or two-pointer technique');
+    }
+    
+    // Detect recursive calls without memoization
+    if (/function\s+\w+.*\{[^}]*\w+\s*\(/g.test(code) && !code.includes('memo') && !code.includes('cache')) {
+      bottlenecks.push('Recursive calls without memoization');
+      optimizationOpportunities.push('Add memoization to avoid redundant calculations');
+    }
+    
+    // Detect array operations in loops
+    if (/for.*\{[^}]*\.push\(|for.*\{[^}]*\.splice\(/g.test(code)) {
+      bottlenecks.push('Array modifications in loops');
+      optimizationOpportunities.push('Pre-allocate arrays or use more efficient data structures');
+    }
+    
+    // Detect string concatenation in loops
+    if (/for.*\{[^}]*\+\s*=.*["'`]/g.test(code)) {
+      bottlenecks.push('String concatenation in loops');
+      optimizationOpportunities.push('Use array.join() or StringBuilder pattern');
+    }
+    
+    // Detect inefficient sorting
+    if (code.includes('sort()') && code.includes('for')) {
+      bottlenecks.push('Sorting inside loops');
+      optimizationOpportunities.push('Sort once outside the loop or use different approach');
+    }
+    
+    // Expected complexity based on patterns
+    let expectedComplexity = 'O(n)';
+    if (/for\s*\([^}]*for\s*\(/g.test(code)) {
+      expectedComplexity = 'O(n²)';
+    } else if (code.includes('sort')) {
+      expectedComplexity = 'O(n log n)';
+    } else if (/while.*while|for.*while/g.test(code)) {
+      expectedComplexity = 'O(n²)';
+    }
+    
+    // Performance rating
+    const bottleneckCount = bottlenecks.length;
+    let rating = 'Excellent';
+    if (bottleneckCount > 3) rating = 'Poor';
+    else if (bottleneckCount > 1) rating = 'Fair';
+    else if (bottleneckCount > 0) rating = 'Good';
+    
+    return {
+      rating,
+      bottlenecks,
+      optimizationOpportunities,
+      expectedComplexity
+    };
+  }
+
+  /**
+   * Check for common solution patterns (plagiarism detection)
+   */
+  private static checkCommonPatterns(code: string, problemTitle: string): {
+    similarity: number;
+    detectedPatterns: string[];
+    originalityScore: number;
+  } {
+    console.log('🔍 Checking for common solution patterns...');
+    
+    const detectedPatterns: string[] = [];
+    let similarityScore = 0;
+    
+    // Common algorithm patterns
+    const patterns = {
+      'Two Pointer': /left.*right|start.*end.*while/g,
+      'Sliding Window': /window|left.*right.*while.*expand/g,
+      'Hash Map': /Map\(\)|new Map|{.*}/g,
+      'Binary Search': /left.*right.*mid|while.*left.*right/g,
+      'Dynamic Programming': /dp\[|memo\[|cache\[/g,
+      'Recursion': /function.*return.*\(/g,
+      'Greedy': /Math\.max|Math\.min.*for/g,
+      'Divide and Conquer': /merge|split.*recursive/g
+    };
+    
+    Object.entries(patterns).forEach(([patternName, regex]) => {
+      if (regex.test(code)) {
+        detectedPatterns.push(patternName);
+        similarityScore += 15; // Each pattern adds similarity
+      }
+    });
+    
+    // Check for extremely common variable names
+    const commonVarNames = ['i', 'j', 'k', 'left', 'right', 'result', 'temp'];
+    const varMatches = commonVarNames.filter(varName => 
+      new RegExp(`\\b${varName}\\b`, 'g').test(code)
+    );
+    similarityScore += varMatches.length * 5;
+    
+    // Check for common function structures
+    if (/function \w+\(.*\) \{[\s\S]*return[\s\S]*\}/.test(code)) {
+      similarityScore += 10;
+    }
+    
+    // Originality score (inverse of similarity)
+    const originalityScore = Math.max(0, 100 - similarityScore);
+    
+    return {
+      similarity: Math.min(100, similarityScore),
+      detectedPatterns,
+      originalityScore
+    };
+  }
+
+  /**
+   * Find duplicated code lines
+   */
+  private static findDuplicatedCode(code: string): number {
+    const lines = code.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 5); // Ignore very short lines
+    
+    const lineCount = new Map<string, number>();
+    let duplicatedLines = 0;
+    
+    lines.forEach(line => {
+      const count = lineCount.get(line) || 0;
+      lineCount.set(line, count + 1);
+      
+      if (count === 1) { // First duplicate
+        duplicatedLines += 2; // Count both original and duplicate
+      } else if (count > 1) { // Additional duplicates
+        duplicatedLines += 1;
+      }
+    });
+    
+    return duplicatedLines;
+  }
+
+  private static basicSolutionEvaluation(
+    solution: string,
+    timeSpent: number,
+    timeLimit: number
+  ): SolutionEvaluation {
+    // Legacy method - redirect to realistic evaluation
+    return this.realisticBasicEvaluation(solution, timeSpent, timeLimit, 0, 'medium');
+  }
+
+  /**
+   * Get hint for challenge
+   */
+  static async getHint(challenge: GameChallenge, progress: string): Promise<string> {
+    try {
+      const prompt = `Provide a helpful hint for this challenge:
+
+CHALLENGE: ${challenge.title}
+DESCRIPTION: ${challenge.description}
+USER PROGRESS: ${progress}
+
+Give a constructive hint without revealing the solution.`;
+
+      if (this.OPENROUTER_API_KEY) {
+        const response = await this.callOpenRouter(prompt);
+        if (response.success && response.data) {
+          return response.data.trim();
+        }
+      }
+    } catch (error) {
+      console.warn('AI hint generation failed:', error);
+    }
+
+    // Fallback to predefined hints
+    const hints = challenge.hints || ['Think step by step', 'Consider edge cases'];
+    return hints[Math.floor(Math.random() * hints.length)];
   }
 }
 
+// Default export for compatibility
 export default AIGamingService;
-export type { GameChallenge, GameSession };

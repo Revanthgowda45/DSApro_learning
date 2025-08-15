@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ThemeToggle from '../ui/ThemeToggle';
 import UserProfileDropdown from '../ui/UserProfileDropdown';
+import FullscreenButton from '../ui/FullscreenButton';
 import DSALogo from '../ui/DSALogo';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -15,7 +16,8 @@ import {
   LogOut,
   Timer,
   Info,
-  GamepadIcon
+  GamepadIcon,
+  Code
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -30,10 +32,11 @@ export default function Navbar() {
     { path: '/gaming', icon: GamepadIcon, label: 'Gaming', description: 'AI-powered challenges' },
     { path: '/progress', icon: TrendingUp, label: 'Progress', description: 'Track your journey' },
     { path: '/profile', icon: User, label: 'Profile', description: 'Your account settings' },
-    { path: '/timer', icon: Timer, label: 'Timer', description: 'Track solving time' }
+    { path: '/code-editor', icon: Code, label: 'Code', description: 'Practice coding online' }
   ];
 
   const quickActions = [
+    { path: '/timer', icon: Timer, label: 'Timer', color: 'text-gray-600 dark:text-gray-400' },
     { path: '/settings', icon: Settings, label: 'Settings', color: 'text-gray-600 dark:text-gray-400' },
     { path: '/about', icon: Info, label: 'About', color: 'text-gray-600 dark:text-gray-400' }
   ];
@@ -114,18 +117,15 @@ export default function Navbar() {
 
             {/* Desktop Right Side */}
             <div className="hidden lg:flex items-center space-x-4">
+              <FullscreenButton />
               <ThemeToggle />
-              
-
-
               <UserProfileDropdown />
             </div>
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden flex items-center space-x-2">
+              <FullscreenButton size="sm" />
               <ThemeToggle />
-              
-
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -255,6 +255,10 @@ export default function Navbar() {
                   </Link>
                 ))}
                 
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Fullscreen</span>
+                  <FullscreenButton size="sm" variant="outline" />
+                </div>
 
                 <button
                   onClick={handleLogout}

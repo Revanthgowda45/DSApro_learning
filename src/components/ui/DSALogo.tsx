@@ -1,9 +1,14 @@
+import { useNavigate } from 'react-router-dom';
+
 interface DSALogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
+  clickable?: boolean;
+  onClick?: () => void;
 }
 
-export default function DSALogo({ className = '', size = 'md' }: DSALogoProps) {
+export default function DSALogo({ className = '', size = 'md', clickable = false, onClick }: DSALogoProps) {
+  const navigate = useNavigate();
   const sizeClasses = {
     sm: 'h-5 w-5',
     md: 'h-6 w-6',
@@ -12,12 +17,21 @@ export default function DSALogo({ className = '', size = 'md' }: DSALogoProps) {
     xxl: 'h-16 w-16'
   };
 
-  return (
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    } else if (clickable) {
+      navigate('/about');
+    }
+  };
+
+  const logoElement = (
     <svg
-      className={`${sizeClasses[size]} ${className}`}
+      className={`${sizeClasses[size]} ${className} ${clickable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      onClick={clickable ? handleClick : undefined}
     >
       {/* Background Circle */}
       <circle
@@ -69,4 +83,6 @@ export default function DSALogo({ className = '', size = 'md' }: DSALogoProps) {
       </defs>
     </svg>
   );
+
+  return logoElement;
 }
