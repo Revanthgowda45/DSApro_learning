@@ -623,7 +623,7 @@ const CodeEditorPage: React.FC = () => {
         </div>
 
         {/* Professional Output Console - Right Side */}
-        <div className="w-full lg:w-96 h-64 lg:h-full border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-800 min-h-0 shadow-sm">
+        <div className="w-full lg:w-96 h-80 lg:h-full border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-800 min-h-0 shadow-sm">
           {/* Professional Tab Navigation */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 flex-shrink-0">
             <button

@@ -82,13 +82,21 @@ const StreamingTerminal: React.FC<StreamingTerminalProps> = ({
     const hasLoop = /for\s*\(.*\)\s*\{[\s\S]*?sc\.next/m.test(code) || 
                     /while\s*\(.*\)\s*\{[\s\S]*?sc\.next/m.test(code);
 
-    // Extract prompts from print statements
+    // Count actual input operations instead of print statements
     const lines = code.split('\n');
     const prompts: string[] = [];
+    let actualInputCount = 0;
     
     lines.forEach((line, index) => {
-      if (line.includes('System.out.print')) {
-        const promptMatch = line.match(/print(?:ln)?\("([^"]+)"/);
+      // Count Scanner input operations
+      if (line.includes('sc.nextLine()') || line.includes('sc.next()') || line.includes('sc.nextInt()') || 
+          line.includes('sc.nextDouble()') || line.includes('sc.nextFloat()')) {
+        actualInputCount++;
+      }
+      
+      // Extract prompts from print statements that precede input
+      if (line.includes('System.out.print') && !line.includes('println')) {
+        const promptMatch = line.match(/print\("([^"]+)"/);
         if (promptMatch) {
           prompts.push(promptMatch[1]);
         }
@@ -96,7 +104,7 @@ const StreamingTerminal: React.FC<StreamingTerminalProps> = ({
     });
 
     // For loop-based programs, start with minimal inputs and adapt
-    const expectedInputs = hasLoop ? 1 : Math.max(prompts.length, 1);
+    const expectedInputs = hasLoop ? 1 : Math.max(actualInputCount, prompts.length, 1);
 
     return { 
       requiresInput: true, 
@@ -354,7 +362,7 @@ const StreamingTerminal: React.FC<StreamingTerminalProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-700">
+    <div className="h-full flex flex-col bg-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-700 max-h-[50vh] sm:max-h-none">
       {/* Terminal Header */}
       <div className="flex items-center justify-between px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center space-x-1 sm:space-x-2">
