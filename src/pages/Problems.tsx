@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Search, Filter, RotateCcw, Eye, EyeOff, Bookmark, ChevronDown, ChevronUp, Sparkles, Code } from 'lucide-react';
 import { transformDSAQuestions, Problem } from '../data/dsaDatabase';
 import ProblemCard from '../components/problems/ProblemCard';
@@ -517,15 +518,15 @@ export default function Problems() {
           </p>
         </div>
         <div className="flex items-center space-x-2 sm:space-x-4">
-          <button
-            onClick={() => window.open('/code-editor', '_blank')}
+          <Link
+            to="/code-editor"
             className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/30 transition-colors text-sm sm:text-base"
-            title="Open Code Editor in new tab"
+            title="Open Code Editor"
           >
             <Code className="h-4 w-4" />
             <span className="hidden xs:inline">Code Editor</span>
             <span className="xs:hidden">Code</span>
-          </button>
+          </Link>
           <button
             onClick={() => setShowAIInsights(!showAIInsights)}
             className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${

@@ -4,6 +4,7 @@ import PistonService, { ExecutionResult } from '../services/pistonService';
 import CodeEditor from '../components/ui/CodeEditor';
 import LanguageSelector from '../components/ui/LanguageSelector';
 import DSALogo from '../components/ui/DSALogo';
+import StreamingTerminal from '../components/ui/StreamingTerminal';
 import { useAuth } from '../context/AuthContext';
 
 const CodeEditorPage: React.FC = () => {
@@ -13,8 +14,13 @@ const CodeEditorPage: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [codeOutput, setCodeOutput] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [userInput, setUserInput] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeOutputTab, setActiveOutputTab] = useState<'console' | 'settings'>('console');
+  const [useStreamingTerminal, setUseStreamingTerminal] = useState(true);
+  const [interactiveMode, setInteractiveMode] = useState(false);
+  const [terminalHistory, setTerminalHistory] = useState<Array<{type: 'output' | 'input', content: string}>>([]);
+  const [currentInput, setCurrentInput] = useState('');
   const [executionTime, setExecutionTime] = useState<number>(0);
   const [memoryUsage, setMemoryUsage] = useState<string>('');
   const [savedFiles, setSavedFiles] = useState<Array<{id: string, name: string, language: string, code: string, timestamp: Date}>>([]);
@@ -55,7 +61,7 @@ const CodeEditorPage: React.FC = () => {
     ],
     'Functional & Others': [
       { value: 'racket', label: 'Racket', defaultCode: '#lang racket\n(displayln "Hello, World!")' },
-      { value: 'erlang', label: 'Erlang', defaultCode: '-module(hello).\n-export([start/0]).\n\nstart() ->\n    io:format("Hello, World!~n").' },
+      { value: 'erlang', label: 'Erlang', defaultCode: '#!/usr/bin/env escript\nmain(_) ->\n    io:format("Hello, World!~n").' },
       { value: 'elixir', label: 'Elixir', defaultCode: 'IO.puts("Hello, World!")' },
       { value: 'haskell', label: 'Haskell', defaultCode: 'main = putStrLn "Hello, World!"' },
       { value: 'clojure', label: 'Clojure', defaultCode: '(println "Hello, World!")' },
@@ -184,13 +190,38 @@ const CodeEditorPage: React.FC = () => {
 
   const getFileExtension = (language: string): string => {
     const extensions: { [key: string]: string } = {
+      // Core Languages
       javascript: 'js',
       python: 'py',
+      python3: 'py',
       java: 'java',
       cpp: 'cpp',
+      'c++': 'cpp',
       c: 'c',
       csharp: 'cs',
-      go: 'go'
+      'c#': 'cs',
+      typescript: 'ts',
+      
+      // Modern Languages
+      php: 'php',
+      swift: 'swift',
+      kotlin: 'kt',
+      dart: 'dart',
+      go: 'go',
+      ruby: 'rb',
+      scala: 'scala',
+      rust: 'rs',
+      
+      // Functional & Others
+      racket: 'rkt',
+      erlang: 'erl',
+      elixir: 'exs',
+      haskell: 'hs',
+      clojure: 'clj',
+      julia: 'jl',
+      rscript: 'R',
+      r: 'R',
+      lua: 'lua'
     };
     return extensions[language] || 'txt';
   };
@@ -201,19 +232,36 @@ const CodeEditorPage: React.FC = () => {
       return;
     }
 
+    // Check if code likely requires interactive input
+    const requiresInput = userCode.includes('cin') || userCode.includes('scanf') || 
+                         userCode.includes('input(') || userCode.includes('Scanner') ||
+                         userCode.includes('readline') || userCode.includes('gets');
+
+    if (requiresInput && !userInput.trim()) {
+      setInteractiveMode(true);
+      setTerminalHistory([
+        { type: 'output', content: '🔄 Interactive mode detected. Program is waiting for input...' },
+        { type: 'output', content: 'Please provide input below and press Enter to continue.' }
+      ]);
+      setIsRunning(true);
+      return;
+    }
+
     setIsRunning(true);
     setCodeOutput('');
     setCodeError('');
+    setInteractiveMode(false);
+    setTerminalHistory([]);
     const startTime = Date.now();
 
     try {
-      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode);
+      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, userInput);
       const endTime = Date.now();
       setExecutionTime(endTime - startTime);
       
       if (result.success) {
         setCodeOutput(result.output || 'Program executed successfully (no output)');
-        setMemoryUsage('N/A'); // Memory usage not available in current ExecutionResult type
+        setMemoryUsage('N/A');
       } else {
         setCodeError(result.error || 'Unknown execution error');
       }
@@ -221,6 +269,39 @@ const CodeEditorPage: React.FC = () => {
       setCodeError(`Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const handleInteractiveInput = async (input: string) => {
+    if (!input.trim()) return;
+
+    // Add user input to history
+    setTerminalHistory(prev => [...prev, { type: 'input', content: `> ${input}` }]);
+    setCurrentInput('');
+
+    // Execute with the provided input
+    setTerminalHistory(prev => [...prev, { type: 'output', content: '⚡ Executing with your input...' }]);
+    
+    const startTime = Date.now();
+    try {
+      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, input);
+      const endTime = Date.now();
+      setExecutionTime(endTime - startTime);
+      
+      if (result.success) {
+        setTerminalHistory(prev => [...prev, { type: 'output', content: result.output || 'Program executed successfully (no output)' }]);
+        setCodeOutput(result.output || 'Program executed successfully (no output)');
+      } else {
+        setTerminalHistory(prev => [...prev, { type: 'output', content: `❌ Error: ${result.error || 'Unknown execution error'}` }]);
+        setCodeError(result.error || 'Unknown execution error');
+      }
+    } catch (error) {
+      const errorMsg = `Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      setTerminalHistory(prev => [...prev, { type: 'output', content: `❌ ${errorMsg}` }]);
+      setCodeError(errorMsg);
+    } finally {
+      setIsRunning(false);
+      setInteractiveMode(false);
     }
   };
 
@@ -580,9 +661,77 @@ const CodeEditorPage: React.FC = () => {
             {/* Console Tab */}
             {activeOutputTab === 'console' && (
               <div className="h-full flex flex-col min-h-0">
-                {(codeOutput || codeError) ? (
+                {/* Terminal Mode Toggle */}
+                <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Terminal className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                        Mode
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs transition-colors ${!useStreamingTerminal ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        Traditional
+                      </span>
+                      <button
+                        onClick={() => setUseStreamingTerminal(!useStreamingTerminal)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-800 ${
+                          useStreamingTerminal
+                            ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+                            : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-all duration-200 ${
+                            useStreamingTerminal ? 'translate-x-5' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-xs transition-colors ${useStreamingTerminal ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        Live
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Traditional Input Section - Only show when not using streaming terminal */}
+                  {!useStreamingTerminal && (
+                    <div className="space-y-1 mt-2">
+                      <textarea
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder="Enter input for your program here..."
+                        className="w-full h-12 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono resize-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        💡 Separate multiple inputs with new lines or spaces
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Live Terminal Info - Only show when using streaming terminal */}
+                  {useStreamingTerminal && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      💬 Interactive mode - programs will prompt for input when needed
+                    </p>
+                  )}
+                </div>
+                
+                {useStreamingTerminal ? (
                   <div className="flex-1 p-2 sm:p-4 min-h-0">
-                    {/* Professional Terminal Output */}
+                    <StreamingTerminal
+                      language={selectedLanguage}
+                      code={userCode}
+                      onExecutionStart={() => setIsRunning(true)}
+                      onExecutionEnd={(result) => {
+                        setIsRunning(false);
+                        setExecutionTime(result.executionTime);
+                      }}
+                    />
+                  </div>
+                ) : (codeOutput || codeError || interactiveMode) ? (
+                  <div className="flex-1 p-2 sm:p-4 min-h-0">
+                    {/* Interactive Terminal or Professional Terminal Output */}
                     <div className="bg-gray-900 rounded-lg overflow-hidden shadow-sm border border-gray-700 h-full flex flex-col min-h-0">
                       {/* Terminal Header */}
                       <div className="flex items-center justify-between px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
@@ -593,7 +742,7 @@ const CodeEditorPage: React.FC = () => {
                             <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500"></div>
                           </div>
                           <span className="text-xs text-gray-300 font-medium">
-                            {codeError ? 'Error' : 'Output'}
+                            {interactiveMode ? 'Interactive Terminal' : codeError ? 'Error' : 'Output'}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1 sm:space-x-2">
@@ -606,7 +755,45 @@ const CodeEditorPage: React.FC = () => {
 
                       {/* Terminal Content */}
                       <div className="flex-1 p-2 sm:p-3 bg-gray-900 font-mono text-xs overflow-y-auto min-h-0">
-                        {codeError ? (
+                        {interactiveMode ? (
+                          <div className="space-y-2">
+                            {/* Terminal History */}
+                            {terminalHistory.map((entry, index) => (
+                              <div key={index} className={`flex text-xs ${entry.type === 'input' ? 'text-blue-300' : 'text-gray-100'}`}>
+                                <span className={`mr-2 flex-shrink-0 ${entry.type === 'input' ? 'text-blue-400' : 'text-green-400'}`}>
+                                  {entry.type === 'input' ? '▶' : '●'}
+                                </span>
+                                <span className="break-all whitespace-pre-wrap">{entry.content}</span>
+                              </div>
+                            ))}
+                            
+                            {/* Interactive Input Line */}
+                            {isRunning && (
+                              <div className="flex items-center space-x-2 mt-4 p-2 bg-gray-800 rounded border border-gray-600">
+                                <span className="text-yellow-400 flex-shrink-0">▶</span>
+                                <input
+                                  type="text"
+                                  value={currentInput}
+                                  onChange={(e) => setCurrentInput(e.target.value)}
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleInteractiveInput(currentInput);
+                                    }
+                                  }}
+                                  placeholder="Enter your input and press Enter..."
+                                  className="flex-1 bg-transparent text-white text-xs outline-none placeholder-gray-400"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleInteractiveInput(currentInput)}
+                                  className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                                >
+                                  Send
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : codeError ? (
                           <div className="space-y-2">
                             <div className="text-red-400 font-semibold flex items-center space-x-2">
                               <XCircle className="w-4 h-4" />
@@ -685,6 +872,28 @@ const CodeEditorPage: React.FC = () => {
                         <span
                           className={`inline-block h-2.5 w-2.5 sm:h-3 sm:w-3 transform rounded-full bg-white transition-transform ${
                             isAutoSave ? 'translate-x-3.5 sm:translate-x-5' : 'translate-x-0.5 sm:translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Streaming Terminal Toggle */}
+                  <div className="p-3 sm:p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">Real-Time Terminal</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Enable live input/output streaming</div>
+                      </div>
+                      <button
+                        onClick={() => setUseStreamingTerminal(!useStreamingTerminal)}
+                        className={`relative inline-flex h-4 w-7 sm:h-5 sm:w-9 items-center rounded-full transition-colors flex-shrink-0 ml-2 ${
+                          useStreamingTerminal ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-2.5 w-2.5 sm:h-3 sm:w-3 transform rounded-full bg-white transition-transform ${
+                            useStreamingTerminal ? 'translate-x-3.5 sm:translate-x-5' : 'translate-x-0.5 sm:translate-x-1'
                           }`}
                         />
                       </button>

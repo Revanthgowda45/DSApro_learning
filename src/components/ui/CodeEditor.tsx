@@ -109,14 +109,36 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   // Language mapping for Monaco Editor
   const getMonacoLanguage = (lang: string): string => {
     const languageMap: { [key: string]: string } = {
+      // Core Languages - using Monaco's actual supported languages
       'javascript': 'javascript',
-      'python': 'python',
+      'python': 'python', 
       'java': 'java',
       'cpp': 'cpp',
+      'c++': 'cpp',
       'c': 'c',
       'csharp': 'csharp',
+      'typescript': 'typescript',
+      
+      // Modern Languages - fallback to similar languages for unsupported ones
+      'php': 'php',
+      'swift': 'swift',
+      'kotlin': 'java', // Monaco doesn't support Kotlin, use Java highlighting
+      'dart': 'dart',
       'go': 'go',
-      'typescript': 'typescript'
+      'ruby': 'ruby',
+      'scala': 'scala',
+      'rust': 'rust',
+      
+      // Functional & Others - using closest supported languages
+      'racket': 'scheme',
+      'erlang': 'javascript', // Monaco doesn't support Erlang
+      'elixir': 'ruby', // Monaco doesn't support Elixir, use Ruby
+      'haskell': 'haskell',
+      'clojure': 'clojure',
+      'julia': 'python', // Monaco doesn't support Julia, use Python
+      'rscript': 'r',
+      'r': 'r',
+      'lua': 'lua'
     };
     return languageMap[lang] || 'javascript';
   };

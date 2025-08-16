@@ -4,6 +4,7 @@ import AIGamingService, { GameChallenge, GameSession } from '../services/aiGamin
 import PistonService, { ExecutionResult } from '../services/pistonService';
 import { useAuth } from '../context/AuthContext';
 import CodeEditor from '../components/ui/CodeEditor';
+import StreamingTerminal from '../components/ui/StreamingTerminal';
 
 interface AIProviderStatus {
   openrouter: {
@@ -43,6 +44,9 @@ const Gaming: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeOutputTab, setActiveOutputTab] = useState<'console' | 'feedback'>('console');
   const [isAutoFormatting, setIsAutoFormatting] = useState<boolean>(false);
+  const [useStreamingTerminal, setUseStreamingTerminal] = useState<boolean>(false);
+  const [userInput, setUserInput] = useState<string>('');
+  const [executionTime, setExecutionTime] = useState<number>(0);
 
   
   // Enhanced detailed analysis state
@@ -502,7 +506,8 @@ func main() {
       // Execute code using Piston API
       const result: ExecutionResult = await PistonService.executeCode(
         selectedLanguage,
-        userSolution
+        userSolution,
+        userInput
       );
 
       console.log('📊 Piston execution result:', result);
@@ -910,7 +915,75 @@ func main() {
                     {/* Console Tab */}
                     {activeOutputTab === 'console' && (
                       <div className="h-full flex flex-col">
-                        {(codeOutput || codeError) ? (
+                        {/* Terminal Mode Toggle */}
+                        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Terminal className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                Mode
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-xs transition-colors ${!useStreamingTerminal ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                Traditional
+                              </span>
+                              <button
+                                onClick={() => setUseStreamingTerminal(!useStreamingTerminal)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-blue-300 dark:focus:ring-blue-800 ${
+                                  useStreamingTerminal
+                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+                                    : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-all duration-200 ${
+                                    useStreamingTerminal ? 'translate-x-5' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                              <span className={`text-xs transition-colors ${useStreamingTerminal ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                Live
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Traditional Input Section - Only show when not using streaming terminal */}
+                          {!useStreamingTerminal && (
+                            <div className="space-y-1 mt-2">
+                              <textarea
+                                value={userInput}
+                                onChange={(e) => setUserInput(e.target.value)}
+                                placeholder="Enter input for your program here..."
+                                className="w-full h-12 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono resize-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                              />
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                💡 Separate multiple inputs with new lines or spaces
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Live Terminal Info - Only show when using streaming terminal */}
+                          {useStreamingTerminal && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                              💬 Interactive mode - programs will prompt for input when needed
+                            </p>
+                          )}
+                        </div>
+
+                        {useStreamingTerminal ? (
+                          <div className="flex-1 p-2 min-h-0">
+                            <StreamingTerminal
+                              language={selectedLanguage}
+                              code={userSolution}
+                              onExecutionStart={() => setIsRunning(true)}
+                              onExecutionEnd={(result) => {
+                                setIsRunning(false);
+                                setExecutionTime(result.executionTime);
+                              }}
+                            />
+                          </div>
+                        ) : (codeOutput || codeError) ? (
                           <div className="flex-1 p-4 min-h-0">
                             {/* Professional Terminal Output */}
                             <div className="bg-gray-900 rounded-lg overflow-hidden shadow-sm border border-gray-700 h-full flex flex-col">
@@ -978,7 +1051,7 @@ func main() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex-1 flex items-center justify-center p-4">
+                          <div className="flex-1 flex items-center justify-center h-full">
                             <div className="text-center text-gray-500 dark:text-gray-400">
                               <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
                               <p className="text-sm">Run your code to see output here</p>

@@ -61,6 +61,7 @@ class PistonService {
 
   // Language mapping for common aliases
   private static readonly LANGUAGE_MAPPING: Record<string, { language: string; version: string }> = {
+    // Core Languages
     'javascript': { language: 'javascript', version: '18.15.0' },
     'js': { language: 'javascript', version: '18.15.0' },
     'python': { language: 'python', version: '3.10.0' },
@@ -72,10 +73,29 @@ class PistonService {
     'c': { language: 'c', version: '10.2.0' },
     'csharp': { language: 'csharp', version: '6.12.0' },
     'c#': { language: 'csharp', version: '6.12.0' },
-    'go': { language: 'go', version: '1.16.2' },
-    'rust': { language: 'rust', version: '1.68.2' },
     'typescript': { language: 'typescript', version: '5.0.3' },
-    'ts': { language: 'typescript', version: '5.0.3' }
+    'ts': { language: 'typescript', version: '5.0.3' },
+    
+    // Modern Languages
+    'php': { language: 'php', version: '8.2.3' },
+    'swift': { language: 'swift', version: '5.3.3' },
+    'kotlin': { language: 'kotlin', version: '1.8.20' },
+    'dart': { language: 'dart', version: '2.19.6' },
+    'go': { language: 'go', version: '1.16.2' },
+    'ruby': { language: 'ruby', version: '3.0.1' },
+    'scala': { language: 'scala', version: '3.2.2' },
+    'rust': { language: 'rust', version: '1.68.2' },
+    
+    // Functional & Others
+    'racket': { language: 'racket', version: '8.3.0' },
+    'erlang': { language: 'erlang', version: '23.0.0' },
+    'elixir': { language: 'elixir', version: '1.11.3' },
+    'haskell': { language: 'haskell', version: '9.0.1' },
+    'clojure': { language: 'clojure', version: '1.10.3' },
+    'julia': { language: 'julia', version: '1.8.5' },
+    'rscript': { language: 'rscript', version: '4.1.1' },
+    'r': { language: 'rscript', version: '4.1.1' },
+    'lua': { language: 'lua', version: '5.4.4' }
   };
 
   /**
@@ -257,15 +277,34 @@ class PistonService {
    */
   private static getFileName(language: string): string {
     const extensions: Record<string, string> = {
+      // Core Languages
       'javascript': 'main.js',
       'python': 'main.py',
       'java': 'Main.java',
       'cpp': 'main.cpp',
       'c': 'main.c',
       'csharp': 'main.cs',
+      'typescript': 'main.ts',
+      
+      // Modern Languages
+      'php': 'main.php',
+      'swift': 'main.swift',
+      'kotlin': 'main.kt',
+      'dart': 'main.dart',
       'go': 'main.go',
+      'ruby': 'main.rb',
+      'scala': 'main.scala',
       'rust': 'main.rs',
-      'typescript': 'main.ts'
+      
+      // Functional & Others
+      'racket': 'main.rkt',
+      'erlang': 'main.erl',
+      'elixir': 'main.exs',
+      'haskell': 'main.hs',
+      'clojure': 'main.clj',
+      'julia': 'main.jl',
+      'rscript': 'main.R',
+      'lua': 'main.lua'
     };
 
     return extensions[language] || 'main.txt';
@@ -333,7 +372,13 @@ package main
 import "fmt"
 func main() {
     fmt.Println("Hello from Go!")
-}`
+}`,
+      'erlang': `#!/usr/bin/env escript
+main(_) ->
+    io:format("Hello from Erlang!~n").`,
+      'elixir': 'IO.puts("Hello from Elixir!")',
+      'haskell': `main :: IO ()
+main = putStrLn "Hello from Haskell!"`
     };
 
     const testCode = testCodes[language.toLowerCase()];
