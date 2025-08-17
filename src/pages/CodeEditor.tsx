@@ -255,7 +255,18 @@ const CodeEditorPage: React.FC = () => {
     const startTime = Date.now();
 
     try {
-      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, userInput);
+      // Format input for different languages
+      let formattedInput = userInput;
+      if (userInput) {
+        const lang = selectedLanguage.toLowerCase();
+        // Languages that expect newline-separated inputs
+        if (['java', 'cpp', 'c++', 'c', 'python', 'python3', 'csharp', 'c#', 'go', 'rust', 'kotlin', 'swift', 'dart', 'scala'].includes(lang)) {
+          // Convert space-separated inputs to newline-separated
+          formattedInput = userInput.trim().replace(/\s+/g, '\n');
+        }
+      }
+      
+      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, formattedInput);
       const endTime = Date.now();
       setExecutionTime(endTime - startTime);
       
@@ -284,7 +295,18 @@ const CodeEditorPage: React.FC = () => {
     
     const startTime = Date.now();
     try {
-      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, input);
+      // Format input for different languages
+      let formattedInput = input;
+      if (input) {
+        const lang = selectedLanguage.toLowerCase();
+        // Languages that expect newline-separated inputs
+        if (['java', 'cpp', 'c++', 'c', 'python', 'python3', 'csharp', 'c#', 'go', 'rust', 'kotlin', 'swift', 'dart', 'scala'].includes(lang)) {
+          // Convert space-separated inputs to newline-separated
+          formattedInput = input.trim().replace(/\s+/g, '\n');
+        }
+      }
+      
+      const result: ExecutionResult = await PistonService.executeCode(selectedLanguage, userCode, formattedInput);
       const endTime = Date.now();
       setExecutionTime(endTime - startTime);
       

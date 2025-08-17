@@ -57,54 +57,246 @@ const StreamingTerminal: React.FC<StreamingTerminalProps> = ({
   }, []);
 
   // Detect if code requires input and analyze input patterns
-  const analyzeInputRequirements = useCallback((code: string): { requiresInput: boolean; expectedInputs: number; inputPrompts: string[]; hasLoop: boolean } => {
-    const inputPatterns = [
-      /Scanner.*nextInt|nextLine|next\(\)/,
-      /System\.in/,
-      /BufferedReader/,
-      /cin\s*>>/,
-      /scanf/,
-      /input\s*\(/,
-      /raw_input\s*\(/,
-      /Console\.ReadLine/,
-      /Console\.Read/,
-      /getchar\s*\(/,
-      /gets\s*\(/
-    ];
+  const analyzeInputRequirements = useCallback((code: string, language: string): { requiresInput: boolean; expectedInputs: number; inputPrompts: string[]; hasLoop: boolean } => {
+    // Language-specific input patterns
+    const inputPatterns: Record<string, RegExp[]> = {
+      // Java
+      java: [/Scanner.*next\w*\(\)/, /System\.in/, /BufferedReader.*readLine/, /sc\.next\w*\(\)/, /scanner\.next\w*\(\)/],
+      // C/C++
+      cpp: [/cin\s*>>/, /getline\s*\(cin/, /scanf/, /getchar\s*\(/, /gets\s*\(/, /fgets/],
+      'c++': [/cin\s*>>/, /getline\s*\(cin/, /scanf/, /getchar\s*\(/, /gets\s*\(/, /fgets/],
+      c: [/scanf/, /getchar\s*\(/, /gets\s*\(/, /fgets/, /getc/],
+      // Python
+      python: [/input\s*\(/, /raw_input\s*\(/, /sys\.stdin/],
+      python3: [/input\s*\(/, /sys\.stdin/],
+      // JavaScript/Node.js
+      javascript: [/readline/, /process\.stdin/, /prompt\s*\(/],
+      // C#
+      csharp: [/Console\.ReadLine/, /Console\.Read/, /Console\.ReadKey/],
+      'c#': [/Console\.ReadLine/, /Console\.Read/, /Console\.ReadKey/],
+      // Go
+      go: [/fmt\.Scan/, /bufio\.NewScanner/, /os\.Stdin/],
+      // Rust
+      rust: [/std::io::stdin/, /io::stdin/, /read_line/],
+      // Ruby
+      ruby: [/gets/, /STDIN\.gets/, /readline/],
+      // PHP
+      php: [/fgets\(STDIN/, /readline/, /stream_get_line/],
+      // Swift
+      swift: [/readLine/, /FileHandle\.standardInput/],
+      // Kotlin
+      kotlin: [/readLine/, /Scanner/, /System\.`in`/],
+      // Dart
+      dart: [/stdin\.readLineSync/, /io\.stdin/],
+      // Scala
+      scala: [/StdIn\.read/, /io\.StdIn/, /Console\.readLine/],
+      // Haskell
+      haskell: [/getLine/, /getChar/, /interact/],
+      // Erlang
+      erlang: [/io:get_line/, /io:read/],
+      // Elixir
+      elixir: [/IO\.gets/, /IO\.read/],
+      // R
+      rscript: [/readline/, /scan/, /readLines/],
+      r: [/readline/, /scan/, /readLines/],
+      // Lua
+      lua: [/io\.read/, /io\.stdin/],
+      // Julia
+      julia: [/readline/, /read/]
+    };
     
-    const requiresInput = inputPatterns.some(pattern => pattern.test(code));
+    const patterns = inputPatterns[language.toLowerCase()] || [];
+    const requiresInput = patterns.some(pattern => pattern.test(code));
     
     if (!requiresInput) {
       return { requiresInput: false, expectedInputs: 0, inputPrompts: [], hasLoop: false };
     }
 
-    // Check for loop patterns that affect input count
-    const hasLoop = /for\s*\(.*\)\s*\{[\s\S]*?sc\.next/m.test(code) || 
-                    /while\s*\(.*\)\s*\{[\s\S]*?sc\.next/m.test(code);
+    // Language-specific loop detection
+    const loopPatterns: Record<string, RegExp[]> = {
+      java: [/for\s*\(.*\)\s*\{[\s\S]*?sc\.next/, /while\s*\(.*\)\s*\{[\s\S]*?sc\.next/],
+      cpp: [/for\s*\(.*\)\s*\{[\s\S]*?cin/, /while\s*\(.*\)\s*\{[\s\S]*?cin/],
+      'c++': [/for\s*\(.*\)\s*\{[\s\S]*?cin/, /while\s*\(.*\)\s*\{[\s\S]*?cin/],
+      c: [/for\s*\(.*\)\s*\{[\s\S]*?scanf/, /while\s*\(.*\)\s*\{[\s\S]*?scanf/],
+      python: [/for\s+.*:\s*[\s\S]*?input/, /while\s+.*:\s*[\s\S]*?input/],
+      python3: [/for\s+.*:\s*[\s\S]*?input/, /while\s+.*:\s*[\s\S]*?input/],
+      javascript: [/for\s*\(.*\)\s*\{[\s\S]*?readline/, /while\s*\(.*\)\s*\{[\s\S]*?readline/],
+      csharp: [/for\s*\(.*\)\s*\{[\s\S]*?Console\.Read/, /while\s*\(.*\)\s*\{[\s\S]*?Console\.Read/],
+      'c#': [/for\s*\(.*\)\s*\{[\s\S]*?Console\.Read/, /while\s*\(.*\)\s*\{[\s\S]*?Console\.Read/],
+      go: [/for\s+.*\{[\s\S]*?fmt\.Scan/, /for\s+range.*\{[\s\S]*?fmt\.Scan/],
+      rust: [/for\s+.*\{[\s\S]*?stdin/, /loop\s*\{[\s\S]*?stdin/],
+      kotlin: [/for\s*\(.*\)\s*\{[\s\S]*?readLine/, /while\s*\(.*\)\s*\{[\s\S]*?readLine/]
+    };
+    
+    const langLoopPatterns = loopPatterns[language.toLowerCase()] || [];
+    const hasLoop = langLoopPatterns.some(pattern => pattern.test(code));
 
-    // Count actual input operations instead of print statements
+    // Count actual input operations for different languages
     const lines = code.split('\n');
     const prompts: string[] = [];
     let actualInputCount = 0;
     
-    lines.forEach((line, index) => {
-      // Count Scanner input operations
-      if (line.includes('sc.nextLine()') || line.includes('sc.next()') || line.includes('sc.nextInt()') || 
-          line.includes('sc.nextDouble()') || line.includes('sc.nextFloat()')) {
-        actualInputCount++;
-      }
-      
-      // Extract prompts from print statements that precede input
-      if (line.includes('System.out.print') && !line.includes('println')) {
-        const promptMatch = line.match(/print\("([^"]+)"/);
-        if (promptMatch) {
-          prompts.push(promptMatch[1]);
-        }
+    lines.forEach((line) => {
+      // Count input operations based on language
+      switch (language.toLowerCase()) {
+        case 'java':
+          if (line.includes('sc.nextLine()') || line.includes('sc.next()') || line.includes('sc.nextInt()') || 
+              line.includes('sc.nextDouble()') || line.includes('sc.nextFloat()') || line.includes('scanner.next') ||
+              line.includes('Scanner') && line.includes('.next')) {
+            actualInputCount++;
+          }
+          if ((line.includes('System.out.print') && !line.includes('println')) || line.includes('System.out.printf')) {
+            const promptMatch = line.match(/print[f]?\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'cpp':
+        case 'c++':
+          if (line.includes('cin >>') || line.includes('getline(cin,') || line.includes('getline(cin ')) actualInputCount++;
+          if (line.includes('cout <<') && line.includes('"')) {
+            const promptMatch = line.match(/cout\s*<<\s*"([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'c':
+          if (line.includes('scanf(')) actualInputCount++;
+          if (line.includes('printf(') && line.includes('"')) {
+            const promptMatch = line.match(/printf\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'python':
+        case 'python3':
+          if (line.includes('input(') || line.includes('raw_input(')) actualInputCount++;
+          if (line.includes('print(') && line.includes('"') && !line.includes('end=') && !line.includes('sep=')) {
+            const promptMatch = line.match(/print\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'csharp':
+        case 'c#':
+          if (line.includes('Console.ReadLine()') || line.includes('Console.Read()')) actualInputCount++;
+          if (line.includes('Console.Write(') && line.includes('"')) {
+            const promptMatch = line.match(/Console\.Write\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'go':
+          if (line.includes('fmt.Scan')) actualInputCount++;
+          if (line.includes('fmt.Print') && line.includes('"')) {
+            const promptMatch = line.match(/fmt\.Print\w*\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'javascript':
+          if (line.includes('readline()') || line.includes('prompt(')) actualInputCount++;
+          if (line.includes('console.log') && line.includes('"')) {
+            const promptMatch = line.match(/console\.log\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'rust':
+          if (line.includes('read_line(') || line.includes('stdin().read_line')) actualInputCount++;
+          if (line.includes('print!') && line.includes('"')) {
+            const promptMatch = line.match(/print!\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'kotlin':
+          if (line.includes('readLine()') || line.includes('Scanner(')) actualInputCount++;
+          if (line.includes('print(') && line.includes('"')) {
+            const promptMatch = line.match(/print\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'swift':
+          if (line.includes('readLine()')) actualInputCount++;
+          if (line.includes('print(') && line.includes('"')) {
+            const promptMatch = line.match(/print\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'dart':
+          if (line.includes('stdin.readLineSync()')) actualInputCount++;
+          if (line.includes('stdout.write(') && line.includes('"')) {
+            const promptMatch = line.match(/stdout\.write\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'ruby':
+          if (line.includes('gets') || line.includes('readline')) actualInputCount++;
+          if (line.includes('print ') && line.includes('"')) {
+            const promptMatch = line.match(/print "([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'php':
+          if (line.includes('fgets(STDIN') || line.includes('readline()')) actualInputCount++;
+          if (line.includes('echo ') && line.includes('"')) {
+            const promptMatch = line.match(/echo "([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'scala':
+          if (line.includes('StdIn.readLine') || line.includes('readLine')) actualInputCount++;
+          if (line.includes('print(') && line.includes('"')) {
+            const promptMatch = line.match(/print\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'haskell':
+          if (line.includes('getLine') || line.includes('getChar')) actualInputCount++;
+          if (line.includes('putStr ') && line.includes('"')) {
+            const promptMatch = line.match(/putStr "([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'erlang':
+          if (line.includes('io:get_line') || line.includes('io:read')) actualInputCount++;
+          if (line.includes('io:format') && line.includes('"')) {
+            const promptMatch = line.match(/io:format\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'elixir':
+          if (line.includes('IO.gets') || line.includes('IO.read')) actualInputCount++;
+          if (line.includes('IO.write') && line.includes('"')) {
+            const promptMatch = line.match(/IO\.write\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'r':
+        case 'rscript':
+          if (line.includes('readline()') || line.includes('scan()')) actualInputCount++;
+          if (line.includes('cat(') && line.includes('"')) {
+            const promptMatch = line.match(/cat\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'lua':
+          if (line.includes('io.read()') || line.includes('io.stdin')) actualInputCount++;
+          if (line.includes('io.write(') && line.includes('"')) {
+            const promptMatch = line.match(/io\.write\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        case 'julia':
+          if (line.includes('readline()') || line.includes('read(')) actualInputCount++;
+          if (line.includes('print(') && line.includes('"')) {
+            const promptMatch = line.match(/print\("([^"]+)"/);
+            if (promptMatch) prompts.push(promptMatch[1]);
+          }
+          break;
+        default:
+          // Generic counting for other languages
+          patterns.forEach(pattern => {
+            if (pattern.test(line)) actualInputCount++;
+          });
       }
     });
 
     // For loop-based programs, start with minimal inputs and adapt
-    const expectedInputs = hasLoop ? 1 : Math.max(actualInputCount, prompts.length, 1);
+    const expectedInputs = hasLoop ? 1 : Math.max(actualInputCount, 1);
 
     return { 
       requiresInput: true, 
@@ -142,7 +334,7 @@ const StreamingTerminal: React.FC<StreamingTerminalProps> = ({
     // Simulate connection delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const inputAnalysis = analyzeInputRequirements(code);
+    const inputAnalysis = analyzeInputRequirements(code, language);
     setExpectedInputs(inputAnalysis.expectedInputs);
     setInputPrompts(inputAnalysis.inputPrompts);
     setHasLoop(inputAnalysis.hasLoop);
