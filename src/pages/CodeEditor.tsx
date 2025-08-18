@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Terminal, Save, FileText, Settings, Maximize, Minimize, Download, Copy, CheckCircle, XCircle, Sun, Moon, Monitor } from 'lucide-react';
+import { Play, Pause, RotateCcw, Terminal, Save, FileText, Settings, Maximize, Minimize, Download, Copy, CheckCircle, XCircle, Sun, Moon, Monitor, Trash2, Edit3 } from 'lucide-react';
 import PistonService, { ExecutionResult } from '../services/pistonService';
 import CodeEditor from '../components/ui/CodeEditor';
 import LanguageSelector from '../components/ui/LanguageSelector';
@@ -9,8 +9,24 @@ import { useAuth } from '../context/AuthContext';
 
 const CodeEditorPage: React.FC = () => {
   const { user } = useAuth();
-  const [userCode, setUserCode] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('javascript');
+  // Initialize state from localStorage or defaults
+  const [userCode, setUserCode] = useState(() => {
+    const saved = localStorage.getItem('codeEditor_currentCode');
+    return saved || '';
+  });
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    const saved = localStorage.getItem('codeEditor_currentLanguage');
+    return saved || 'javascript';
+  });
+  const [currentFileName, setCurrentFileName] = useState(() => {
+    const saved = localStorage.getItem('codeEditor_currentFileName');
+    return saved || 'untitled';
+  });
+  const [currentFileId, setCurrentFileId] = useState<string | null>(() => {
+    const saved = localStorage.getItem('codeEditor_currentFileId');
+    return saved || null;
+  });
+  
   const [isRunning, setIsRunning] = useState(false);
   const [codeOutput, setCodeOutput] = useState('');
   const [codeError, setCodeError] = useState('');
@@ -24,8 +40,7 @@ const CodeEditorPage: React.FC = () => {
   const [executionTime, setExecutionTime] = useState<number>(0);
   const [memoryUsage, setMemoryUsage] = useState<string>('');
   const [savedFiles, setSavedFiles] = useState<Array<{id: string, name: string, language: string, code: string, timestamp: Date}>>([]);
-  const [currentFileName, setCurrentFileName] = useState('untitled');
-  const [isAutoSave, setIsAutoSave] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | 'saving'>('saved');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     // Check localStorage or default to system
     const saved = localStorage.getItem('codeEditorTheme');
@@ -35,7 +50,6 @@ const CodeEditorPage: React.FC = () => {
     return 'system';
   });
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Programming language options organized by categories
   const languageCategories = {
@@ -87,16 +101,27 @@ const CodeEditorPage: React.FC = () => {
     }
   }, []);
 
-  // Auto-save functionality
+  // Track unsaved changes
   useEffect(() => {
-    if (isAutoSave && userCode.trim() && currentFileName) {
+    if (userCode.trim()) {
+      setSaveStatus('unsaved');
+    }
+  }, [userCode, selectedLanguage, currentFileName]);
+
+  // Auto-save for existing files only (debounced - waits for user to stop typing)
+  useEffect(() => {
+    if (currentFileId && saveStatus === 'unsaved' && userCode.trim()) {
       const timer = setTimeout(() => {
-        saveCurrentFile();
-      }, 2000); // Auto-save after 2 seconds of inactivity
+        // Only auto-save if file exists in savedFiles
+        const fileExists = savedFiles.some(file => file.id === currentFileId);
+        if (fileExists) {
+          silentAutoSave();
+        }
+      }, 3000); // Auto-save after 3 seconds of no typing activity
 
       return () => clearTimeout(timer);
     }
-  }, [userCode, isAutoSave, currentFileName]);
+  }, [userCode, currentFileId, saveStatus, savedFiles]);
 
   // Theme management (only for non-logged-in users)
   useEffect(() => {
@@ -114,7 +139,6 @@ const CodeEditorPage: React.FC = () => {
         shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       }
       
-      setIsDarkMode(shouldBeDark);
       
       // Apply theme to document
       if (shouldBeDark) {
@@ -168,7 +192,28 @@ const CodeEditorPage: React.FC = () => {
     };
   }, []);
 
-  // Initialize default code when language changes
+  // Save current editor state to localStorage
+  useEffect(() => {
+    localStorage.setItem('codeEditor_currentCode', userCode);
+  }, [userCode]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditor_currentLanguage', selectedLanguage);
+  }, [selectedLanguage]);
+
+  useEffect(() => {
+    localStorage.setItem('codeEditor_currentFileName', currentFileName);
+  }, [currentFileName]);
+
+  useEffect(() => {
+    if (currentFileId) {
+      localStorage.setItem('codeEditor_currentFileId', currentFileId);
+    } else {
+      localStorage.removeItem('codeEditor_currentFileId');
+    }
+  }, [currentFileId]);
+
+  // Initialize default code when language changes (only if no saved code)
   useEffect(() => {
     const language = programmingLanguages.find(lang => lang.value === selectedLanguage);
     if (language && !userCode.trim()) {
@@ -180,12 +225,21 @@ const CodeEditorPage: React.FC = () => {
     setSelectedLanguage(language);
     const langConfig = programmingLanguages.find(lang => lang.value === language);
     if (langConfig) {
-      setUserCode(langConfig.defaultCode);
-      setCurrentFileName(`untitled.${getFileExtension(language)}`);
+      // Only set default code if current code is empty or is default code from previous language
+      const currentLangConfig = programmingLanguages.find(lang => lang.value === selectedLanguage);
+      if (!userCode.trim() || userCode === currentLangConfig?.defaultCode) {
+        setUserCode(langConfig.defaultCode);
+      }
+      // Update filename extension if it's still default
+      if (currentFileName.startsWith('untitled')) {
+        setCurrentFileName(`untitled.${getFileExtension(language)}`);
+      }
     }
     // Clear previous output
     setCodeOutput('');
     setCodeError('');
+    setSaveStatus('unsaved');
+    setCurrentFileId(null); // Reset file ID for new language
   };
 
   const getFileExtension = (language: string): string => {
@@ -333,22 +387,102 @@ const CodeEditorPage: React.FC = () => {
     setCodeOutput('');
     setCodeError('');
     setCurrentFileName(`untitled.${getFileExtension(selectedLanguage)}`);
+    setSaveStatus('unsaved');
+    setCurrentFileId(null); // Reset file ID when clearing
   };
 
-  const saveCurrentFile = () => {
+  // Silent auto-save function (no visual feedback)
+  const silentAutoSave = () => {
     if (!userCode.trim()) return;
 
-    const newFile = {
-      id: Date.now().toString(),
-      name: currentFileName,
-      language: selectedLanguage,
-      code: userCode,
-      timestamp: new Date()
-    };
+    try {
+      // Check if file with same name already exists
+      const existingFileIndex = savedFiles.findIndex(file => file.name === currentFileName);
+      
+      const fileId = existingFileIndex >= 0 ? savedFiles[existingFileIndex].id : Date.now().toString();
+      const fileData = {
+        id: fileId,
+        name: currentFileName,
+        language: selectedLanguage,
+        code: userCode,
+        timestamp: new Date()
+      };
 
-    const updatedFiles = [newFile, ...savedFiles.slice(0, 9)]; // Keep only 10 most recent files
-    setSavedFiles(updatedFiles);
-    localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
+      let updatedFiles;
+      if (existingFileIndex >= 0) {
+        // Update existing file
+        updatedFiles = [...savedFiles];
+        updatedFiles[existingFileIndex] = fileData;
+        // Move updated file to top
+        updatedFiles = [fileData, ...updatedFiles.filter((_, index) => index !== existingFileIndex)];
+      } else {
+        // Create new file
+        updatedFiles = [fileData, ...savedFiles.slice(0, 9)]; // Keep only 10 most recent files
+      }
+
+      setSavedFiles(updatedFiles);
+      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
+      
+      // Silent save - no visual feedback, just mark as saved
+      setSaveStatus('saved');
+      
+    } catch (error) {
+      console.error('Silent auto-save failed:', error);
+    }
+  };
+
+  // Manual save function (with visual feedback)
+  const saveCurrentFile = () => {
+    if (!userCode.trim()) {
+      alert('Cannot save empty code!');
+      return;
+    }
+
+    setSaveStatus('saving');
+
+    try {
+      // Check if file with same name already exists
+      const existingFileIndex = savedFiles.findIndex(file => file.name === currentFileName);
+      
+      const fileId = existingFileIndex >= 0 ? savedFiles[existingFileIndex].id : Date.now().toString();
+      const fileData = {
+        id: fileId,
+        name: currentFileName,
+        language: selectedLanguage,
+        code: userCode,
+        timestamp: new Date()
+      };
+
+      // Set current file ID for auto-save tracking
+      setCurrentFileId(fileId);
+
+      let updatedFiles;
+      if (existingFileIndex >= 0) {
+        // Update existing file
+        updatedFiles = [...savedFiles];
+        updatedFiles[existingFileIndex] = fileData;
+        // Move updated file to top
+        updatedFiles = [fileData, ...updatedFiles.filter((_, index) => index !== existingFileIndex)];
+      } else {
+        // Create new file
+        updatedFiles = [fileData, ...savedFiles.slice(0, 9)]; // Keep only 10 most recent files
+      }
+
+      setSavedFiles(updatedFiles);
+      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
+      
+      setSaveStatus('saved');
+      
+      // Show success feedback briefly for manual saves only
+      setTimeout(() => {
+        setSaveStatus('unsaved');
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error saving file:', error);
+      alert('Failed to save file!');
+      setSaveStatus('unsaved');
+    }
   };
 
   const loadFile = (file: typeof savedFiles[0]) => {
@@ -356,13 +490,58 @@ const CodeEditorPage: React.FC = () => {
     setUserCode(file.code);
     setSelectedLanguage(file.language);
     setCurrentFileName(file.name);
+    setCurrentFileId(file.id); // Set file ID for auto-save tracking
     setCodeOutput('');
     setCodeError('');
+    setSaveStatus('saved');
     
     // Force Monaco Editor to refresh by triggering a small delay
     setTimeout(() => {
       setUserCode(file.code);
     }, 10);
+  };
+
+  const deleteFile = (fileId: string, fileName: string) => {
+    if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      const updatedFiles = savedFiles.filter(file => file.id !== fileId);
+      setSavedFiles(updatedFiles);
+      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
+      
+      // If deleted file was the current file, reset current file ID
+      if (currentFileId === fileId) {
+        setCurrentFileId(null);
+        localStorage.removeItem('codeEditor_currentFileId');
+      }
+    }
+  };
+
+  const renameFile = (fileId: string, oldName: string) => {
+    const newName = prompt('Enter new filename:', oldName);
+    if (newName && newName.trim() && newName !== oldName) {
+      const updatedFiles = savedFiles.map(file => 
+        file.id === fileId 
+          ? { ...file, name: newName.trim(), timestamp: new Date() }
+          : file
+      );
+      setSavedFiles(updatedFiles);
+      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
+      
+      // If renamed file is the current file, update current filename
+      if (currentFileId === fileId) {
+        setCurrentFileName(newName.trim());
+      }
+    }
+  };
+
+  const clearAllFiles = () => {
+    if (confirm(`Are you sure you want to delete all ${savedFiles.length} saved files? This action cannot be undone.`)) {
+      setSavedFiles([]);
+      localStorage.setItem('codeEditorFiles', JSON.stringify([]));
+      
+      // Reset current file ID since all files are deleted
+      setCurrentFileId(null);
+      localStorage.removeItem('codeEditor_currentFileId');
+    }
   };
 
   const downloadCode = () => {
@@ -477,10 +656,25 @@ const CodeEditorPage: React.FC = () => {
             <div className="flex items-center space-x-1">
               <button
                 onClick={saveCurrentFile}
-                className="px-3 py-2 text-xs bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-1 shadow-sm hover:shadow-md font-medium"
+                disabled={saveStatus === 'saving'}
+                className={`px-3 py-2 text-xs rounded-lg transition-all duration-200 flex items-center space-x-1 shadow-sm hover:shadow-md font-medium ${
+                  saveStatus === 'saved' 
+                    ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                    : saveStatus === 'saving'
+                    ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                }`}
               >
-                <Save className="w-3 h-3" />
-                <span>Save</span>
+                {saveStatus === 'saving' ? (
+                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                ) : saveStatus === 'saved' ? (
+                  <CheckCircle className="w-3 h-3" />
+                ) : (
+                  <Save className="w-3 h-3" />
+                )}
+                <span>
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
+                </span>
               </button>
               <button
                 onClick={clearCode}
@@ -555,10 +749,25 @@ const CodeEditorPage: React.FC = () => {
             </button>
             <button
               onClick={saveCurrentFile}
-              className="px-4 py-2 text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center space-x-2 shadow-sm hover:shadow-md font-medium"
+              disabled={saveStatus === 'saving'}
+              className={`px-4 py-2 text-sm rounded-lg transition-all duration-200 flex items-center space-x-2 shadow-sm hover:shadow-md font-medium ${
+                saveStatus === 'saved' 
+                  ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                  : saveStatus === 'saving'
+                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+              }`}
             >
-              <Save className="w-4 h-4" />
-              <span>Save</span>
+              {saveStatus === 'saving' ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : saveStatus === 'saved' ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>
+                {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save'}
+              </span>
             </button>
             <button
               onClick={clearCode}
@@ -878,25 +1087,14 @@ const CodeEditorPage: React.FC = () => {
             {activeOutputTab === 'settings' && (
               <div className="h-full flex flex-col min-h-0">
                 <div className="p-2 sm:p-4 overflow-y-auto">
-                  {/* Auto-save toggle */}
-                  <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
+                  {/* Manual Save Info */}
+                  <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center space-x-2">
+                      <Save className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">Auto-save</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Automatically save changes</div>
+                        <div className="text-xs sm:text-sm font-medium text-blue-900 dark:text-blue-100">Manual Save Mode</div>
+                        <div className="text-xs text-blue-700 dark:text-blue-300">Click Save button to store code in localStorage</div>
                       </div>
-                      <button
-                        onClick={() => setIsAutoSave(!isAutoSave)}
-                        className={`relative inline-flex h-4 w-7 sm:h-5 sm:w-9 items-center rounded-full transition-colors flex-shrink-0 ml-2 ${
-                          isAutoSave ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-2.5 w-2.5 sm:h-3 sm:w-3 transform rounded-full bg-white transition-transform ${
-                            isAutoSave ? 'translate-x-3.5 sm:translate-x-5' : 'translate-x-0.5 sm:translate-x-1'
-                          }`}
-                        />
-                      </button>
                     </div>
                   </div>
 
@@ -924,26 +1122,61 @@ const CodeEditorPage: React.FC = () => {
 
                   {/* Saved Files */}
                   <div>
-                    <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white mb-2 sm:mb-3">Recent Files</h3>
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">Recent Files</h3>
+                      {savedFiles.length > 0 && (
+                        <button
+                          onClick={clearAllFiles}
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Delete all files"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
                     {savedFiles.length > 0 ? (
                       <div className="space-y-1.5 sm:space-y-2">
                         {savedFiles.map((file) => (
                           <div
                             key={file.id}
-                            className="p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors active:bg-gray-100 dark:active:bg-gray-600"
-                            onClick={() => loadFile(file)}
+                            className="group p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                           >
                             <div className="flex items-center justify-between">
-                              <div className="flex-1 min-w-0">
+                              <div 
+                                className="flex-1 min-w-0 cursor-pointer"
+                                onClick={() => loadFile(file)}
+                              >
                                 <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
                                   {file.name}
+                                  {currentFileId === file.id && (
+                                    <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(current)</span>
+                                  )}
                                 </div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                   {file.language} • {new Date(file.timestamp).toLocaleDateString()}
                                 </div>
                               </div>
-                              <div className="ml-2 flex-shrink-0">
-                                <FileText className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+                              <div className="ml-2 flex items-center space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    renameFile(file.id, file.name);
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                  title="Rename file"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteFile(file.id, file.name);
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                  title="Delete file"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
                             </div>
                           </div>
