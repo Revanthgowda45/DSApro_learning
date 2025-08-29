@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DSALogo from '../components/ui/DSALogo';
+import { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, 
   Target, 
@@ -20,11 +21,15 @@ import {
   Github,
   Linkedin,
   Globe,
-  Play
+  Play,
+  X,
+  PlayCircle
 } from 'lucide-react';
 
 export default function About() {
   const { user } = useAuth();
+  const [showVideo, setShowVideo] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const features = [
     {
@@ -78,6 +83,60 @@ export default function About() {
     "Greedy Algorithms",
     "Graph Algorithms"
   ];
+
+  // Enhanced autoplay functionality
+  useEffect(() => {
+    const playVideo = async () => {
+      if (videoRef.current && showVideo) {
+        try {
+          // Ensure video is unmuted and ready
+          videoRef.current.muted = false;
+          videoRef.current.currentTime = 0; // Start from beginning
+          
+          // Wait for video to be ready
+          if (videoRef.current.readyState >= 3) {
+            await videoRef.current.play();
+          } else {
+            // Wait for video to load enough data
+            videoRef.current.addEventListener('canplay', async () => {
+              try {
+                await videoRef.current!.play();
+              } catch (error) {
+                console.log('Autoplay blocked by browser');
+              }
+            }, { once: true });
+          }
+        } catch (error) {
+          console.log('Autoplay blocked by browser - user needs to interact first');
+        }
+      }
+    };
+
+    if (showVideo) {
+      // Multiple attempts to ensure autoplay works
+      setTimeout(playVideo, 100);
+      setTimeout(playVideo, 500);
+      setTimeout(playVideo, 1000);
+    }
+  }, [showVideo]);
+
+  // Additional effect to handle video element changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && showVideo) {
+      const handleLoadedData = async () => {
+        try {
+          video.muted = false;
+          await video.play();
+        } catch (error) {
+          console.log('Autoplay attempt failed');
+        }
+      };
+
+      video.addEventListener('loadeddata', handleLoadedData);
+      return () => video.removeEventListener('loadeddata', handleLoadedData);
+    }
+  }, [showVideo]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
@@ -147,6 +206,52 @@ export default function About() {
           </div>
         </div>
       </div>
+
+      {/* Video Pop-up - Perfect Sizing */}
+      {showVideo && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 md:w-[400px] lg:w-[450px] xl:w-[480px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-4 slide-in-from-right-4 duration-500">
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowVideo(false)}
+              className="absolute top-3 right-3 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all duration-200 z-10 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-sm"
+              title="Close video"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            {/* Header */}
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center">
+                <PlayCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mr-2 flex-shrink-0" />
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  Platform Demo
+                </h3>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                See our DSA platform in action
+              </p>
+            </div>
+            
+            {/* Video Container */}
+            <div className="p-4">
+              <div className="relative aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
+                <video 
+                  ref={videoRef}
+                  className="w-full h-full object-cover"
+                  controls
+                  loop
+                  preload="auto"
+                  playsInline
+                >
+                  <source src="/DSAvideo.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Section */}
       <div className="py-12 sm:py-16 bg-white dark:bg-gray-800 border-y border-gray-200 dark:border-gray-700">

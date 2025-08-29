@@ -6,6 +6,7 @@ import LanguageSelector from '../components/ui/LanguageSelector';
 import DSALogo from '../components/ui/DSALogo';
 import StreamingTerminal from '../components/ui/StreamingTerminal';
 import { useAuth } from '../context/AuthContext';
+import { codeFilesService, CodeFile } from '../services/codeFilesService';
 
 const CodeEditorPage: React.FC = () => {
   const { user } = useAuth();
@@ -39,7 +40,7 @@ const CodeEditorPage: React.FC = () => {
   const [currentInput, setCurrentInput] = useState('');
   const [executionTime, setExecutionTime] = useState<number>(0);
   const [memoryUsage, setMemoryUsage] = useState<string>('');
-  const [savedFiles, setSavedFiles] = useState<Array<{id: string, name: string, language: string, code: string, timestamp: Date}>>([]);
+  const [savedFiles, setSavedFiles] = useState<CodeFile[]>([]);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | 'saving'>('saved');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     // Check localStorage or default to system
@@ -88,18 +89,28 @@ const CodeEditorPage: React.FC = () => {
   // Flatten all languages for compatibility
   const programmingLanguages = Object.values(languageCategories).flat();
 
-  // Load saved files from localStorage
+  // Load saved files from Supabase or localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('codeEditorFiles');
-    if (saved) {
+    const loadFiles = async () => {
       try {
-        const files = JSON.parse(saved);
+        const files = await codeFilesService.getFiles(user?.id);
         setSavedFiles(files);
       } catch (error) {
         console.error('Error loading saved files:', error);
       }
+    };
+    
+    loadFiles();
+  }, [user]);
+
+  // Sync local files to Supabase when user logs in
+  useEffect(() => {
+    if (user?.id) {
+      codeFilesService.syncLocalToSupabase(user.id).catch(error => {
+        console.error('Error syncing local files to Supabase:', error);
+      });
     }
-  }, []);
+  }, [user?.id]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -222,19 +233,18 @@ const CodeEditorPage: React.FC = () => {
   }, [selectedLanguage]);
 
   const handleLanguageChange = (language: string) => {
-    setSelectedLanguage(language);
     const langConfig = programmingLanguages.find(lang => lang.value === language);
     if (langConfig) {
-      // Only set default code if current code is empty or is default code from previous language
-      const currentLangConfig = programmingLanguages.find(lang => lang.value === selectedLanguage);
-      if (!userCode.trim() || userCode === currentLangConfig?.defaultCode) {
-        setUserCode(langConfig.defaultCode);
-      }
-      // Update filename extension if it's still default
+      // Always set the default code for the new language
+      setUserCode(langConfig.defaultCode);
+      
+      // Update filename extension
       if (currentFileName.startsWith('untitled')) {
         setCurrentFileName(`untitled.${getFileExtension(language)}`);
       }
     }
+    
+    setSelectedLanguage(language);
     // Clear previous output
     setCodeOutput('');
     setCodeError('');
@@ -392,7 +402,7 @@ const CodeEditorPage: React.FC = () => {
   };
 
   // Silent auto-save function (no visual feedback)
-  const silentAutoSave = () => {
+  const silentAutoSave = async () => {
     if (!userCode.trim()) return;
 
     try {
@@ -400,7 +410,7 @@ const CodeEditorPage: React.FC = () => {
       const existingFileIndex = savedFiles.findIndex(file => file.name === currentFileName);
       
       const fileId = existingFileIndex >= 0 ? savedFiles[existingFileIndex].id : Date.now().toString();
-      const fileData = {
+      const fileData: CodeFile = {
         id: fileId,
         name: currentFileName,
         language: selectedLanguage,
@@ -408,6 +418,10 @@ const CodeEditorPage: React.FC = () => {
         timestamp: new Date()
       };
 
+      // Save to Supabase/localStorage via service
+      await codeFilesService.saveFile(fileData, user?.id);
+      
+      // Update local state
       let updatedFiles;
       if (existingFileIndex >= 0) {
         // Update existing file
@@ -421,7 +435,6 @@ const CodeEditorPage: React.FC = () => {
       }
 
       setSavedFiles(updatedFiles);
-      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
       
       // Silent save - no visual feedback, just mark as saved
       setSaveStatus('saved');
@@ -432,7 +445,7 @@ const CodeEditorPage: React.FC = () => {
   };
 
   // Manual save function (with visual feedback)
-  const saveCurrentFile = () => {
+  const saveCurrentFile = async () => {
     if (!userCode.trim()) {
       alert('Cannot save empty code!');
       return;
@@ -445,7 +458,7 @@ const CodeEditorPage: React.FC = () => {
       const existingFileIndex = savedFiles.findIndex(file => file.name === currentFileName);
       
       const fileId = existingFileIndex >= 0 ? savedFiles[existingFileIndex].id : Date.now().toString();
-      const fileData = {
+      const fileData: CodeFile = {
         id: fileId,
         name: currentFileName,
         language: selectedLanguage,
@@ -456,6 +469,10 @@ const CodeEditorPage: React.FC = () => {
       // Set current file ID for auto-save tracking
       setCurrentFileId(fileId);
 
+      // Save to Supabase/localStorage via service
+      await codeFilesService.saveFile(fileData, user?.id);
+      
+      // Update local state
       let updatedFiles;
       if (existingFileIndex >= 0) {
         // Update existing file
@@ -469,7 +486,6 @@ const CodeEditorPage: React.FC = () => {
       }
 
       setSavedFiles(updatedFiles);
-      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
       
       setSaveStatus('saved');
       
@@ -501,46 +517,81 @@ const CodeEditorPage: React.FC = () => {
     }, 10);
   };
 
-  const deleteFile = (fileId: string, fileName: string) => {
+  const deleteFile = async (fileId: string, fileName: string) => {
     if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
-      const updatedFiles = savedFiles.filter(file => file.id !== fileId);
-      setSavedFiles(updatedFiles);
-      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
-      
-      // If deleted file was the current file, reset current file ID
-      if (currentFileId === fileId) {
-        setCurrentFileId(null);
-        localStorage.removeItem('codeEditor_currentFileId');
+      try {
+        // Delete from Supabase/localStorage via service
+        await codeFilesService.deleteFile(fileId, user?.id);
+        
+        // Update local state
+        const updatedFiles = savedFiles.filter(file => file.id !== fileId);
+        setSavedFiles(updatedFiles);
+        
+        // If deleted file was the current file, reset current file ID
+        if (currentFileId === fileId) {
+          setCurrentFileId(null);
+          localStorage.removeItem('codeEditor_currentFileId');
+        }
+      } catch (error) {
+        console.error('Error deleting file:', error);
+        alert('Failed to delete file!');
       }
     }
   };
 
-  const renameFile = (fileId: string, oldName: string) => {
+  const renameFile = async (fileId: string, oldName: string) => {
     const newName = prompt('Enter new filename:', oldName);
     if (newName && newName.trim() && newName !== oldName) {
-      const updatedFiles = savedFiles.map(file => 
-        file.id === fileId 
-          ? { ...file, name: newName.trim(), timestamp: new Date() }
-          : file
-      );
-      setSavedFiles(updatedFiles);
-      localStorage.setItem('codeEditorFiles', JSON.stringify(updatedFiles));
-      
-      // If renamed file is the current file, update current filename
-      if (currentFileId === fileId) {
-        setCurrentFileName(newName.trim());
+      try {
+        // Find the file to rename
+        const fileToRename = savedFiles.find(file => file.id === fileId);
+        if (!fileToRename) return;
+        
+        // Create updated file data
+        const updatedFileData: CodeFile = {
+          ...fileToRename,
+          name: newName.trim(),
+          timestamp: new Date()
+        };
+        
+        // Save updated file to Supabase/localStorage via service
+        await codeFilesService.saveFile(updatedFileData, user?.id);
+        
+        // Update local state
+        const updatedFiles = savedFiles.map(file => 
+          file.id === fileId 
+            ? updatedFileData
+            : file
+        );
+        setSavedFiles(updatedFiles);
+        
+        // If renamed file is the current file, update current filename
+        if (currentFileId === fileId) {
+          setCurrentFileName(newName.trim());
+        }
+      } catch (error) {
+        console.error('Error renaming file:', error);
+        alert('Failed to rename file!');
       }
     }
   };
 
-  const clearAllFiles = () => {
+  const clearAllFiles = async () => {
     if (confirm(`Are you sure you want to delete all ${savedFiles.length} saved files? This action cannot be undone.`)) {
-      setSavedFiles([]);
-      localStorage.setItem('codeEditorFiles', JSON.stringify([]));
-      
-      // Reset current file ID since all files are deleted
-      setCurrentFileId(null);
-      localStorage.removeItem('codeEditor_currentFileId');
+      try {
+        // Clear all files from Supabase/localStorage via service
+        await codeFilesService.clearAllFiles(user?.id);
+        
+        // Update local state
+        setSavedFiles([]);
+        
+        // Reset current file ID since all files are deleted
+        setCurrentFileId(null);
+        localStorage.removeItem('codeEditor_currentFileId');
+      } catch (error) {
+        console.error('Error clearing all files:', error);
+        alert('Failed to clear all files!');
+      }
     }
   };
 
