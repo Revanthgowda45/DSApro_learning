@@ -30,6 +30,10 @@ export default function About() {
   const { user } = useAuth();
   const [showVideo, setShowVideo] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const popupRef = useRef<HTMLDivElement>(null);
 
   const features = [
     {
@@ -138,6 +142,135 @@ export default function About() {
     }
   }, [showVideo]);
 
+  // Initialize position to bottom-right with smooth slide-in animation
+  useEffect(() => {
+    if (showVideo && typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 640; // sm breakpoint
+      const popupWidth = isMobile ? 320 : 500;
+      const popupHeight = isMobile ? 280 : 400;
+      
+      // Start from off-screen (right side) for slide-in effect
+      setPosition({
+        x: window.innerWidth, // Start off-screen right
+        y: window.innerHeight - popupHeight - 16 // Final bottom position
+      });
+      
+      // Animate to final position after a brief delay
+      setTimeout(() => {
+        setPosition({
+          x: window.innerWidth - popupWidth - 16, // Slide to bottom-right
+          y: window.innerHeight - popupHeight - 16
+        });
+      }, 100);
+    }
+  }, [showVideo]);
+
+  // Handle window resize to reposition video pop-up
+  useEffect(() => {
+    if (!showVideo) return;
+
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 640;
+      const popupWidth = isMobile ? 320 : 500;
+      const popupHeight = isMobile ? 280 : 400;
+      
+      // Reposition to bottom-right with new screen dimensions
+      setPosition({
+        x: window.innerWidth - popupWidth - 16,
+        y: window.innerHeight - popupHeight - 16
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showVideo]);
+
+  // Drag functionality - Mouse and Touch
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.drag-handle')) {
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y
+      });
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.drag-handle')) {
+      const touch = e.touches[0];
+      setIsDragging(true);
+      setDragStart({
+        x: touch.clientX - position.x,
+        y: touch.clientY - position.y
+      });
+    }
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isDragging) {
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+      
+      // Mobile-aware boundary constraints
+      const isMobile = window.innerWidth < 640;
+      const popupWidth = popupRef.current?.offsetWidth || (isMobile ? 320 : 400);
+      const popupHeight = popupRef.current?.offsetHeight || (isMobile ? 240 : 300);
+      
+      const maxX = window.innerWidth - popupWidth;
+      const maxY = window.innerHeight - popupHeight;
+      
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    }
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (isDragging) {
+      e.preventDefault(); // Prevent scrolling
+      const touch = e.touches[0];
+      const newX = touch.clientX - dragStart.x;
+      const newY = touch.clientY - dragStart.y;
+      
+      // Mobile boundary constraints
+      const popupWidth = popupRef.current?.offsetWidth || 320;
+      const popupHeight = popupRef.current?.offsetHeight || 240;
+      
+      const maxX = window.innerWidth - popupWidth;
+      const maxY = window.innerHeight - popupHeight;
+      
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [isDragging, dragStart, position]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       {/* Hero Section */}
@@ -207,10 +340,23 @@ export default function About() {
         </div>
       </div>
 
-      {/* Video Pop-up - Perfect Sizing */}
+      {/* Video Pop-up - Draggable */}
       {showVideo && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 md:w-[400px] lg:w-[450px] xl:w-[480px] max-w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-4 slide-in-from-right-4 duration-500">
-          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div 
+          ref={popupRef}
+          className={`fixed z-50 w-80 sm:w-96 md:w-[400px] lg:w-[450px] xl:w-[480px] max-w-[calc(100vw-2rem)] transition-all duration-500 ease-out touch-manipulation ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          style={{
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            transform: showVideo ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(20px)',
+            opacity: showVideo ? 1 : 0
+          }}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+        >
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-3xl transition-shadow duration-300">
             {/* Close Button */}
             <button
               onClick={() => setShowVideo(false)}
@@ -220,21 +366,32 @@ export default function About() {
               <X className="w-4 h-4" />
             </button>
             
-            {/* Header */}
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+            {/* Header - Drag Handle */}
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 drag-handle cursor-move select-none">
               <div className="flex items-center">
                 <PlayCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mr-2 flex-shrink-0" />
                 <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                   Platform Demo
                 </h3>
+                <div className="ml-auto flex space-x-1 sm:hidden">
+                  <div className="w-2 h-1 bg-gray-400 rounded-full"></div>
+                  <div className="w-2 h-1 bg-gray-400 rounded-full"></div>
+                  <div className="w-2 h-1 bg-gray-400 rounded-full"></div>
+                </div>
+                <div className="ml-auto hidden sm:flex space-x-1">
+                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                </div>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                See our DSA platform in action
+                <span className="sm:hidden">Tap and drag to move</span>
+                <span className="hidden sm:inline">See our DSA platform in action • Drag to move</span>
               </p>
             </div>
             
             {/* Video Container */}
-            <div className="p-4">
+            <div className="p-3 sm:p-4" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
               <div className="relative aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
                 <video 
                   ref={videoRef}
@@ -243,8 +400,13 @@ export default function About() {
                   loop
                   preload="auto"
                   playsInline
+                  muted
+                  autoPlay
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                 >
                   <source src="/DSAvideo.mp4" type="video/mp4" />
+                  <source src="/DSAvideo.webm" type="video/webm" />
                   Your browser does not support the video tag.
                 </video>
               </div>
