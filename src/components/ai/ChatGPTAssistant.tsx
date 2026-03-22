@@ -10,7 +10,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
-import { GeminiAIService } from '../../services/geminiAIService';
+import { OpenRouterAIService } from '../../services/openRouterAIService';
 import { Problem } from '../../data/dsaDatabase';
 
 interface ChatMessage {
@@ -21,13 +21,13 @@ interface ChatMessage {
   type?: 'hint' | 'analysis' | 'similar' | 'general';
 }
 
-interface GeminiAssistantProps {
+interface AIAssistantProps {
   problem: Problem;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function GeminiAssistant({ problem, isOpen, onClose }: GeminiAssistantProps) {
+export default function AIAssistant({ problem, isOpen, onClose }: AIAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -37,8 +37,8 @@ export default function GeminiAssistant({ problem, isOpen, onClose }: GeminiAssi
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Check if Gemini is configured
-  const { configured, message: configMessage } = GeminiAIService.checkConfiguration();
+  // Check if AI is configured (Groq primary → OpenRouter fallback)
+  const { configured, message: configMessage } = OpenRouterAIService.checkConfiguration();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -105,7 +105,7 @@ What would you like to know?`,
         parts: [{ text: msg.content }]
       }));
 
-      const response = await GeminiAIService.getProblemHelp(
+      const response = await OpenRouterAIService.getProblemHelp(
         problemContext,
         userMessage.content,
         conversationHistory
@@ -141,7 +141,7 @@ What would you like to know?`,
         companies: problem.companies || []
       };
 
-      const generatedHints = await GeminiAIService.getHints(problemContext);
+      const generatedHints = await OpenRouterAIService.getHints(problemContext);
       setHints(generatedHints);
 
       const hintsMessage: ChatMessage = {
@@ -175,7 +175,7 @@ What would you like to know?`,
         companies: problem.companies || []
       };
 
-      const analysis = await GeminiAIService.analyzeApproach(problemContext, approach);
+      const analysis = await OpenRouterAIService.analyzeApproach(problemContext, approach);
 
       const analysisMessage: ChatMessage = {
         id: Date.now().toString(),
@@ -207,7 +207,7 @@ What would you like to know?`,
         companies: problem.companies || []
       };
 
-      const similarProblems = await GeminiAIService.getSimilarProblems(problemContext);
+      const similarProblems = await OpenRouterAIService.getSimilarProblems(problemContext);
 
       const similarMessage: ChatMessage = {
         id: Date.now().toString(),
@@ -351,7 +351,7 @@ What would you like to know?`,
                       <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
                       <span className="text-sm text-gray-600 dark:text-gray-400">
-                        AI is thinking...
+                        AI is thinking via Groq + OpenRouter...
                       </span>
                     </div>
                   </div>

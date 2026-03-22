@@ -185,7 +185,8 @@ export class SupabaseAuthService {
 
   // Update user profile
   static async updateProfile(userId: string, updates: ProfileUpdate): Promise<User> {
-    const { data: profile, error } = await supabase
+    this.checkSupabaseAvailable();
+    const { data: profile, error } = await supabase!
       .from('profiles')
       .update({
         ...updates,
@@ -198,7 +199,7 @@ export class SupabaseAuthService {
     if (error) throw error
 
     // Get email from auth user
-    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const { data: { user: authUser } } = await supabase!.auth.getUser()
     
     return {
       ...profile,
@@ -208,7 +209,8 @@ export class SupabaseAuthService {
 
   // Update user password
   static async updatePassword(newPassword: string): Promise<void> {
-    const { error } = await supabase.auth.updateUser({
+    this.checkSupabaseAvailable();
+    const { error } = await supabase!.auth.updateUser({
       password: newPassword
     })
 
@@ -217,7 +219,8 @@ export class SupabaseAuthService {
 
   // Update user email
   static async updateEmail(newEmail: string): Promise<void> {
-    const { error } = await supabase.auth.updateUser({
+    this.checkSupabaseAvailable();
+    const { error } = await supabase!.auth.updateUser({
       email: newEmail
     })
 
@@ -235,7 +238,7 @@ export class SupabaseAuthService {
       }
 
       // Update profile in profiles table
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await supabase!
         .from('profiles')
         .update({
           full_name: userData.full_name,
@@ -277,7 +280,8 @@ export class SupabaseAuthService {
 
   // Reset password
   static async resetPassword(email: string): Promise<void> {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    this.checkSupabaseAvailable();
+    const { error } = await supabase!.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`
     })
 
@@ -286,14 +290,16 @@ export class SupabaseAuthService {
 
   // Subscribe to auth state changes
   static onAuthStateChange(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback)
+    this.checkSupabaseAvailable();
+    return supabase!.auth.onAuthStateChange(callback)
   }
 
   // Check if user exists
   static async userExists(email: string): Promise<boolean> {
     try {
+      this.checkSupabaseAvailable();
       // This is a workaround since Supabase doesn't provide a direct way to check if user exists
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase!.auth.signInWithPassword({
         email,
         password: 'dummy-password'
       })
@@ -309,7 +315,8 @@ export class SupabaseAuthService {
   // Get user by email (admin function)
   static async getUserByEmail(email: string): Promise<User | null> {
     try {
-      const { data: profiles, error } = await supabase
+      this.checkSupabaseAvailable();
+      const { data: profiles, error } = await supabase!
         .from('profiles')
         .select('*')
         .limit(1)
@@ -328,11 +335,12 @@ export class SupabaseAuthService {
   // Delete user account
   static async deleteAccount(): Promise<void> {
     try {
+      this.checkSupabaseAvailable();
       const session = await this.getCurrentSession()
       if (!session?.user) throw new Error('No authenticated user')
 
       // Delete profile first (due to foreign key constraints)
-      const { error: profileError } = await supabase
+      const { error: profileError } = await supabase!
         .from('profiles')
         .delete()
         .eq('id', session.user.id)
@@ -340,7 +348,7 @@ export class SupabaseAuthService {
       if (profileError) throw profileError
 
       // Delete auth user
-      const { error: authError } = await supabase.auth.admin.deleteUser(session.user.id)
+      const { error: authError } = await supabase!.auth.admin.deleteUser(session.user.id)
       if (authError) throw authError
 
     } catch (error) {
@@ -352,17 +360,18 @@ export class SupabaseAuthService {
   // Upload avatar
   static async uploadAvatar(userId: string, file: File): Promise<string> {
     try {
+      this.checkSupabaseAvailable();
       const fileExt = file.name.split('.').pop()
       const fileName = `${userId}-${Math.random()}.${fileExt}`
       const filePath = `avatars/${fileName}`
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase!.storage
         .from('avatars')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
-      const { data } = supabase.storage
+      const { data } = supabase!.storage
         .from('avatars')
         .getPublicUrl(filePath)
 
@@ -381,14 +390,15 @@ export class SupabaseAuthService {
   // Get user statistics
   static async getUserStats(userId: string) {
     try {
+      this.checkSupabaseAvailable();
       // Get problem progress stats
-      const { data: progressStats, error: progressError } = await supabase
+      const { data: progressStats, error: progressError } = await supabase!
         .rpc('get_user_progress_stats', { user_id: userId })
 
       if (progressError) throw progressError
 
       // Get session stats
-      const { data: sessionStats, error: sessionError } = await supabase
+      const { data: sessionStats, error: sessionError } = await supabase!
         .rpc('get_user_session_stats', { user_id: userId })
 
       if (sessionError) throw sessionError
@@ -406,6 +416,7 @@ export class SupabaseAuthService {
   // Migrate localStorage data to Supabase
   static async migrateLocalStorageData(userId: string): Promise<void> {
     try {
+      this.checkSupabaseAvailable();
       // Migrate problem progress
       const problemStatuses = localStorage.getItem('dsa_problem_statuses')
       if (problemStatuses) {
@@ -416,7 +427,7 @@ export class SupabaseAuthService {
           status: status as string
         }))
 
-        const { error } = await supabase
+        const { error } = await supabase!
           .from('problem_progress')
           .upsert(progressData, { onConflict: 'user_id,problem_id' })
 
@@ -436,7 +447,7 @@ export class SupabaseAuthService {
           streak_day: session.streakDay || 0
         }))
 
-        const { error } = await supabase
+        const { error } = await supabase!
           .from('user_sessions')
           .upsert(sessionData, { onConflict: 'user_id,session_date' })
 

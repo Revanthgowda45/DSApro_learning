@@ -294,8 +294,8 @@ export default function About() {
             </h1>
 
             <p className="text-base sm:text-lg lg:text-xl text-gray-600 dark:text-gray-400 mb-6 sm:mb-8 max-w-3xl mx-auto px-2">
-              Your comprehensive platform for learning data structures and algorithms. 
-              Practice coding problems and track your progress.
+              An AI mentor that <strong>remembers your mistakes</strong>, learns your patterns, and evolves your
+              learning path.
             </p>
 
             {/* CTA Buttons */}
@@ -429,6 +429,71 @@ export default function About() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Hindsight Agent Memory Section */}
+      <div className="py-12 sm:py-16 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 sm:mb-12">
+            <div className="flex justify-center mb-4">
+              <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-2xl">
+                <Brain className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+              </div>
+            </div>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">
+              Powered by <span className="text-purple-600 dark:text-purple-400">Hindsight</span> Agent Memory
+            </h2>
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 max-w-3xl mx-auto px-4">
+              Unlike traditional platforms, our AI mentor <strong>retains</strong> your coding history,
+              <strong> recalls</strong> your patterns, and <strong>reflects</strong> to give personalized guidance.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
+            <div className="bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 text-center hover:shadow-xl transition-all duration-300">
+              <div className="bg-purple-100 dark:bg-purple-900/30 w-12 h-12 rounded-xl flex items-center justify-center text-purple-600 dark:text-purple-400 mx-auto mb-4">
+                <Zap className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Retain</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Every code attempt, error pattern, and debugging session is stored as a learning signal.
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 text-center hover:shadow-xl transition-all duration-300">
+              <div className="bg-blue-100 dark:bg-blue-900/30 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400 mx-auto mb-4">
+                <Target className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Recall</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                AI recalls your history to generate targeted recommendations, hints, and challenges.
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-xl sm:rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 text-center hover:shadow-xl transition-all duration-300">
+              <div className="bg-green-100 dark:bg-green-900/30 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400 mx-auto mb-4">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Reflect</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                The AI reflects on accumulated data to identify recurring mistakes and evolve your learning path.
+              </p>
+            </div>
+          </div>
+
+          <div className="text-center mt-8">
+            <a
+              href="https://hindsight.vectorize.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl text-sm sm:text-base"
+            >
+              <BookOpen className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
+              Learn About Hindsight
+              <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+            </a>
           </div>
         </div>
       </div>
@@ -1171,10 +1236,14 @@ export default function About() {
                   © {new Date().getFullYear()} DSA Learning Platform. All rights reserved.
                 </p>
               </div>
-              <div className="flex items-center space-x-6 text-sm text-gray-400">
-                <span>Built with passion for learning</span>
+               <div className="flex items-center space-x-6 text-sm text-gray-400">
+                <span>Built with Hindsight Agent Memory</span>
                 <span className="hidden md:inline">•</span>
-                <span className="hidden md:inline">Made in India</span>
+                <a href="https://github.com/vectorize-io/hindsight" target="_blank" rel="noopener noreferrer" className="hidden md:inline hover:text-purple-400 transition-colors">Hindsight GitHub</a>
+                <span className="hidden md:inline">•</span>
+                <a href="https://vectorize.io/features/agent-memory" target="_blank" rel="noopener noreferrer" className="hidden md:inline hover:text-purple-400 transition-colors">Vectorize</a>
+                <span className="hidden md:inline">•</span>
+                <span className="hidden md:inline">Made in India 🇮🇳</span>
               </div>
             </div>
           </div>

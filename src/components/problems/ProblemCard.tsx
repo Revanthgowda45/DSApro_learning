@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   ExternalLink, 
   Clock, 
@@ -17,7 +18,8 @@ import {
   Timer,
   BarChart3,
   Copy,
-  Check
+  Check,
+  Terminal
 } from 'lucide-react';
 import { Problem } from '../../data/dsaDatabase';
 import { updateAllAnalytics } from '../../utils/analyticsUpdater';
@@ -25,7 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ProblemProgressService } from '../../services/problemProgressService';
 import Stopwatch from '../ui/Stopwatch';
 import { timeTrackingService, ProblemTimeStats } from '../../services/timeTrackingService';
-import GeminiAssistant from '../ai/GeminiAssistant';
+import AIAssistant from '../ai/ChatGPTAssistant';
 
 interface ProblemCardProps {
   problem: Problem;
@@ -645,6 +647,16 @@ Link: ${problem.link || 'N/A'}`;
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 sm:ml-4 mt-3 sm:mt-0">
 
             
+            {/* Solve Here Button (Internal) */}
+            <Link
+              to={`/solve/${problem.id}`}
+              className="flex items-center justify-center space-x-2 px-3 sm:px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md font-medium min-h-[40px] flex-1 sm:flex-none"
+            >
+              <Terminal className="h-4 w-4" />
+              <span className="hidden xs:inline">Solve Here</span>
+              <span className="xs:hidden">Solve</span>
+            </Link>
+            
             {(problem.link || problem.leetcodeLink) && (
               <a
                 href={problem.link || problem.leetcodeLink}
@@ -906,8 +918,8 @@ Link: ${problem.link || 'N/A'}`;
         )}
       </div>
       
-      {/* Gemini AI Assistant Modal */}
-      <GeminiAssistant
+      {/* AI Assistant Modal */}
+      <AIAssistant
         problem={problem}
         isOpen={showChatGPT}
         onClose={() => setShowChatGPT(false)}

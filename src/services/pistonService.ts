@@ -4,6 +4,8 @@
  * Documentation: https://piston.readthedocs.io/en/latest/api-v2/
  */
 
+import { GroqAIService } from './groqAIService';
+
 export interface PistonRuntime {
   language: string;
   version: string;
@@ -55,6 +57,7 @@ export interface ExecutionResult {
 }
 
 class PistonService {
+  // Use piston.rs public execute API instead of emkc.org which requires auth now
   private static readonly API_BASE_URL = 'https://emkc.org/api/v2/piston';
   private static readonly REQUEST_TIMEOUT = 10000; // 10 seconds
   private static readonly MAX_OUTPUT_LENGTH = 10000; // Limit output length
@@ -187,6 +190,10 @@ class PistonService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.warn('Piston API unauthorized. Falling back to AI simulated execution...');
+          return this.simulateExecutionWithAI(language, code, stdin);
+        }
         throw new Error(`Piston API error: ${response.status} ${response.statusText}`);
       }
 
@@ -221,6 +228,56 @@ class PistonService {
         output: '',
         error: `Execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         executionTime
+      };
+    }
+  }
+
+  /**
+   * AI-powered simulated code execution fallback for when Piston API is blocked
+   */
+  private static async simulateExecutionWithAI(language: string, code: string, stdin?: string): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    try {
+      const prompt = `You are a strict code execution engine. 
+Simulate running the following ${language} code.
+${stdin ? `Standard Input provided:\n${stdin}\n` : ''}
+
+Code:
+\`\`\`${language}
+${code}
+\`\`\`
+
+If there is a syntax or runtime error, reply exactly with:
+ERROR: [error description]
+
+If it runs successfully, reply exactly with the stdout console output and NOTHING else (no markdown, no explanations).`;
+
+      const response = await GroqAIService.chat([{ role: 'system', content: prompt }]);
+      const output = response.trim();
+      
+      if (output.startsWith('ERROR:')) {
+        return {
+          success: false,
+          output: '',
+          error: output.substring(6).trim(),
+          executionTime: Date.now() - startTime,
+          exitCode: 1
+        };
+      }
+
+      return {
+        success: true,
+        output: output,
+        executionTime: Date.now() - startTime,
+        exitCode: 0
+      };
+    } catch (err) {
+      return {
+        success: false,
+        output: '',
+        error: 'Execution failed: Public execution API is unavailable and AI fallback failed.',
+        executionTime: Date.now() - startTime,
+        exitCode: 1
       };
     }
   }

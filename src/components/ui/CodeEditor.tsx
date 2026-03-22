@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
-import { PlayCircle, RotateCcw, Copy, Scissors, ClipboardPaste, MoreHorizontal, Type, Undo2, Redo2 } from 'lucide-react';
+import { PlayCircle, RotateCcw, Copy, Scissors, ClipboardPaste, MoreHorizontal, Type, Undo2, Redo2, Lightbulb } from 'lucide-react';
 
 interface CodeEditorProps {
   value: string;
@@ -27,7 +27,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onReset,
   isRunning = false,
   isDisabled = false,
-  height = '400px',
+  height = '100%',
   theme = 'vs-dark',
   hideButtons = false,
   hideHeader = false,
@@ -419,8 +419,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   }
 
   return (
-    <div className="relative">
-      <div className="bg-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-700">
+    <div className="flex flex-col h-full relative">
+      <div className="flex-1 bg-gray-900 overflow-hidden flex flex-col rounded-lg shadow-lg border border-gray-700">
         {/* Editor Header */}
         {!hideHeader && (
           <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
@@ -519,9 +519,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         )}
 
         {/* Monaco Editor */}
-        <div className="relative" style={{ height }}>
+        <div className="relative flex-1 min-h-[200px]" style={{ height: height === '100%' ? 'auto' : height }}>
           <Editor
-            height={height}
+            height="100%"
             language={getMonacoLanguage(language)}
             value={value}
             onChange={handleEditorChange}
@@ -562,8 +562,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         {!hideStats && (
           <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-t border-gray-700">
             <div className="flex items-center space-x-4 text-xs text-gray-400">
-              <span>Lines: {value.split('\n').length}</span>
-              <span>Characters: {value.length}</span>
+              <span>Lines: {(value || '').split('\n').length}</span>
+              <span>Characters: {(value || '').length}</span>
             </div>
             {!hideButtons && (
               <div className="flex items-center space-x-2">
@@ -592,11 +592,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           </div>
         )}
       </div>
-      
       {/* Keyboard Shortcuts Info */}
       {!hideTips && (
-        <div className="mt-2 text-xs text-gray-500 flex items-center space-x-4">
-          <span>💡 Tip: Press Ctrl+Enter to run code</span>
+        <div className="px-4 py-2 border-t border-gray-700 bg-gray-900 text-xs text-gray-500 flex items-center space-x-4">
+          <Lightbulb className="w-3 h-3 text-yellow-500" />
+          <span>Tip: Press Ctrl+Enter to run code</span>
           <span>•</span>
           <span>Ctrl+/ to toggle comments</span>
           <span>•</span>

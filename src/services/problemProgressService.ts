@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
-import type { Database, Tables, Inserts, Updates } from '../lib/supabase'
+import type { Tables, Inserts, Updates } from '../lib/supabase'
+import { HindsightService } from './hindsightService'
 
 type ProblemProgress = Tables<'problem_progress'>
 type ProblemProgressInsert = Inserts<'problem_progress'>
@@ -87,6 +88,11 @@ export class ProblemProgressService {
     
     // Update user analytics in real-time
     await this.updateUserAnalytics(userId)
+
+    // 🧠 Hindsight: retain memory about this problem interaction
+    this.retainProblemMemory(userId, problemId, updates).catch(() => {
+      // Non-blocking: don't fail the main operation if Hindsight is unavailable
+    });
     
     return data
   }
@@ -258,6 +264,38 @@ export class ProblemProgressService {
       await supabaseClient
         .from('user_sessions')
         .insert(sessionData)
+    }
+
+    // 🧠 Hindsight: retain daily session activity (non-blocking)
+    HindsightService.retainDailySession(
+      userId,
+      today,
+      stats.solvedProblems,
+      stats.currentStreak,
+      Object.keys(stats.topicProgress)
+    ).catch(() => {});
+  }
+
+  // 🧠 Hindsight: Store a memory about a problem interaction
+  private static async retainProblemMemory(
+    userId: string,
+    problemId: string,
+    updates: ProblemProgressUpdate
+  ): Promise<void> {
+    const status = updates.status;
+    if (!status) return;
+
+    // Look up real topic and difficulty from the DSA problem database
+    const { dsaProblems } = await import('../data/dsaDatabase');
+    const problem = dsaProblems.find(p => p.id === problemId);
+    const topic = problem?.category || 'DSA';
+    const difficulty = problem?.difficulty || 'Medium';
+    const timeSpentMin = updates.time_spent ? Math.round(updates.time_spent / 60) : undefined;
+
+    if (status === 'solved' || status === 'mastered') {
+      await HindsightService.retainSolvedPattern(userId, problemId, topic, difficulty, timeSpentMin);
+    } else if (status === 'attempted') {
+      await HindsightService.retainMistake(userId, problemId, topic, difficulty);
     }
   }
 

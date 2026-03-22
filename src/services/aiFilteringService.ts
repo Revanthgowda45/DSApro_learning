@@ -9,7 +9,7 @@ export interface FilterCriteria {
 }
 
 export class AIFilteringService {
-  private static readonly API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  private static readonly API_KEY = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_OPENROUTER_API_KEY;
   private static readonly API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   static async parseFilterQuery(query: string, availableProblems: Problem[]): Promise<FilterCriteria> {
@@ -58,7 +58,7 @@ Return ONLY the JSON object, no explanation:`;
           'Authorization': `Bearer ${this.API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'google/gemma-2-9b-it:free',
+          model: 'arcee-ai/trinity-large-preview:free',
           messages: [
             {
               role: 'user',

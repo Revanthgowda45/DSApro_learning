@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import StatsCard from '../components/dashboard/StatsCard';
 import SupabaseProgressiveRecommendations from '../components/dashboard/SupabaseProgressiveRecommendations';
+import HindsightMemoryWidget from '../components/dashboard/HindsightMemoryWidget';
+import HindsightDailyChallenge from '../components/dashboard/HindsightDailyChallenge';
 
 
 import { UserSessionService } from '../services/userSessionService';
@@ -221,6 +223,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-8">
+          
+          {/* Hindsight AI Mentor Challenge */}
+          <HindsightDailyChallenge />
+
           {/* AI Recommendations */}
           <div className="space-y-4">
             <div className="flex items-center space-x-3">
@@ -245,6 +251,8 @@ export default function Dashboard() {
         {/* Right Column */}
         <div className="space-y-8">
 
+          {/* 🧠 Hindsight Memory Widget – AI Agent Memory */}
+          <HindsightMemoryWidget />
 
           {/* Quick Stats */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">

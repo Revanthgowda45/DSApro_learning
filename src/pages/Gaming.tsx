@@ -11,7 +11,7 @@ interface AIProviderStatus {
     configured: boolean;
     available: boolean;
   };
-  gemini: {
+  groq: {
     configured: boolean;
     available: boolean;
   };
@@ -84,7 +84,7 @@ const Gaming: React.FC = () => {
   const [evaluationReasoning, setEvaluationReasoning] = useState<string>('');
   const [providerStatus, setProviderStatus] = useState<AIProviderStatus>({
     openrouter: { configured: false, available: false },
-    gemini: { configured: false, available: false },
+    groq: { configured: false, available: false },
     currentProvider: null,
     fallbackAvailable: false
   });
@@ -275,15 +275,15 @@ func main() {
       // Initialize provider status with default values
       setProviderStatus({
         openrouter: {
-          configured: true,
-          available: true
+          configured: !!import.meta.env.VITE_OPENROUTER_API_KEY,
+          available: !!import.meta.env.VITE_OPENROUTER_API_KEY
         },
-        gemini: {
-          configured: true,
-          available: true
+        groq: {
+          configured: !!import.meta.env.VITE_GROQ_API_KEY,
+          available: !!import.meta.env.VITE_GROQ_API_KEY
         },
-        currentProvider: 'openrouter',
-        fallbackAvailable: true
+        currentProvider: import.meta.env.VITE_GROQ_API_KEY ? 'groq' : 'openrouter',
+        fallbackAvailable: !!(import.meta.env.VITE_GROQ_API_KEY && import.meta.env.VITE_OPENROUTER_API_KEY)
       });
     } catch (error) {
       console.error('Failed to load provider status:', error);
@@ -309,8 +309,6 @@ func main() {
       const currentDifficulty = activeDifficultyButton?.textContent?.toLowerCase() || selectedDifficulty;
       
       const categoryLabel = challengeCategories.find(cat => cat.value === currentCategory)?.label || 'Arrays';
-      console.log(`🎮 Gaming Component: Current Category="${currentCategory}", Label="${categoryLabel}", Current Difficulty="${currentDifficulty}"`);
-      console.log(`🔍 State values: Category="${selectedCategory}", Difficulty="${selectedDifficulty}"`);
       
       const challenge = await AIGamingService.generateChallenge(
         currentDifficulty as 'easy' | 'medium' | 'hard', 
@@ -480,16 +478,11 @@ func main() {
 
   // Code execution function using Piston API
   const runCode = async () => {
-    console.log('🚀 Run Code button clicked - Using Piston API');
-    
     if (!userSolution.trim()) {
       setCodeError('Please write some code to run');
       setIsRunning(false);
       return;
     }
-
-    console.log('📝 User solution:', userSolution);
-    console.log('🔤 Selected language:', selectedLanguage);
 
     setIsRunning(true);
     setCodeOutput('');
@@ -501,8 +494,7 @@ func main() {
         throw new Error(`Language '${selectedLanguage}' is not supported by Piston API`);
       }
 
-      console.log('🔍 Executing code with Piston API...');
-      
+
       // Execute code using Piston API
       const result: ExecutionResult = await PistonService.executeCode(
         selectedLanguage,
@@ -510,20 +502,17 @@ func main() {
         userInput
       );
 
-      console.log('📊 Piston execution result:', result);
-
       if (result.success) {
         setCodeOutput(result.output || '(no output)');
-        console.log(`✅ Code executed successfully in ${result.executionTime}ms`);
       } else {
         setCodeError(result.error || 'Unknown execution error');
         if (result.output) {
           setCodeOutput(result.output);
         }
-        console.error('❌ Code execution failed:', result.error);
+        console.error('Code execution failed:', result.error);
       }
     } catch (error) {
-      console.error('❌ Piston API error:', error);
+      console.error('Piston API error:', error);
       setCodeError(`Execution Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsRunning(false);
@@ -564,8 +553,6 @@ func main() {
       return;
     }
     
-    console.log('🚀 Starting solution submission...');
-    console.log('📝 User solution:', userSolution.substring(0, 100) + '...');
     
     setIsLoading(true);
     setError('');
@@ -575,13 +562,9 @@ func main() {
       const languageLabel = programmingLanguages.find(l => l.value === selectedLanguage)?.label || 'JavaScript';
       const solutionWithContext = `Language: ${languageLabel}\n\n${userSolution}`;
       
-      console.log('🤖 Calling AI evaluation...');
       const evaluation = await AIGamingService.evaluateSolution(currentChallenge, solutionWithContext, timeElapsed, hintsUsed);
       
-      console.log('📊 Evaluation result:', evaluation);
-      
       if (evaluation) {
-        console.log('✅ Setting evaluation feedback...');
         setSolutionFeedback(evaluation.feedback);
         setSolutionScore(evaluation.score);
         setIsCorrectSolution(evaluation.isCorrect);
@@ -612,8 +595,6 @@ func main() {
           timeSpent: timeElapsed
         };
         setGameSession(updatedSession);
-        
-        console.log('🎉 Game completed with AI evaluation:', updatedSession);
       } else {
         // Fallback if AI evaluation fails
         const finalScore = calculateScore();
@@ -664,7 +645,7 @@ func main() {
     }
   };
 
-  const getProviderStatusIcon = (provider: 'openrouter' | 'gemini') => {
+  const getProviderStatusIcon = (provider: 'openrouter' | 'groq') => {
     const status = providerStatus[provider];
     if (status.configured && status.available) {
       return <CheckCircle className="w-4 h-4 text-green-500" />;
@@ -701,7 +682,6 @@ func main() {
               <select
                 value={selectedCategory}
                 onChange={(e) => {
-                  console.log(`🔄 Category changed from "${selectedCategory}" to "${e.target.value}"`);
                   setSelectedCategory(e.target.value);
                 }}
                 className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -724,7 +704,6 @@ func main() {
                   <button
                     key={difficulty.value}
                     onClick={() => {
-                      console.log(`🔄 Difficulty changed from "${selectedDifficulty}" to "${difficulty.value}"`);
                       setSelectedDifficulty(difficulty.value);
                     }}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${

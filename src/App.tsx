@@ -19,6 +19,7 @@ import Admin from './pages/Admin';
 import Stopwatch from './pages/Stopwatch';
 import Gaming from './pages/Gaming';
 import CodeEditor from './pages/CodeEditor';
+import ProblemSolver from './pages/ProblemSolver';
 import './utils/progressReset'; // Import for console access
 import './utils/resetAnalytics'; // Import reset analytics utility
 import { NotificationService } from './services/notificationService';
@@ -150,6 +151,11 @@ function AppContent() {
             </ProtectedRoute>
           } />
           <Route path="/code-editor" element={<CodeEditor />} />
+          <Route path="/solve/:problemId" element={
+            <ProtectedRoute>
+              <ProblemSolver />
+            </ProtectedRoute>
+          } />
           <Route path="/about" element={<About />} />
           
           <Route path="/" element={

@@ -31,17 +31,19 @@ interface ProblemContext {
 import { LocalSimilarProblemsService } from './localSimilarProblemsService';
 
 export class OpenRouterAIService {
-  // Using OpenRouter for better reliability and free models
   private static readonly API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-  private static readonly MODEL_NAME = 'google/gemma-2-9b-it:free'; // Free model
-  // Alternative free models: 'meta-llama/llama-3.1-8b-instruct:free', 'microsoft/phi-3-mini-128k-instruct:free'
+
+  // Fallback model chain (tried in order when previous model fails/rate-limits)
+  private static readonly MODELS = [
+    'arcee-ai/trinity-large-preview:free',
+    'z-ai/glm-4.5-air:free',
+    'stepfun/step-3.5-flash:free',
+    'nvidia/nemotron-nano-12b-v2-vl:free',
+    'openrouter/auto',
+  ];
 
   private static getApiKey(): string | null {
-    // Try OpenRouter API key first, then fallback to Gemini
-    return import.meta.env.VITE_OPENROUTER_API_KEY || 
-           import.meta.env.VITE_GEMINI_API_KEY || 
-           import.meta.env.VITE_GOOGLE_API_KEY || 
-           null;
+    return import.meta.env.VITE_OPENROUTER_API_KEY || null;
   }
 
   private static isConfigured(): boolean {
@@ -64,7 +66,7 @@ export class OpenRouterAIService {
     
     // Convert conversation history to OpenRouter format
     const messages: ChatMessage[] = [
-      { role: 'assistant', content: systemPrompt },
+      { role: 'user', content: `[System Instructions]\n${systemPrompt}` },
       { role: 'assistant', content: 'I understand. I\'m ready to help you with this problem. What would you like to know?' }
     ];
 
@@ -113,7 +115,8 @@ Example format:
 
     try {
       const messages: ChatMessage[] = [
-        { role: 'assistant', content: 'You are a helpful coding mentor who provides progressive hints without giving away solutions.' },
+        { role: 'user', content: '[System Instructions]\nYou are a helpful coding mentor who provides progressive hints without giving away solutions.' },
+        { role: 'assistant', content: 'Understood. I will provide progressive hints without revealing solutions.' },
         { role: 'user', content: prompt }
       ];
 
@@ -160,7 +163,8 @@ Be constructive and educational in your feedback.`;
 
     try {
       const messages: ChatMessage[] = [
-        { role: 'assistant', content: 'You are an expert code reviewer who provides constructive feedback on algorithmic approaches.' },
+        { role: 'user', content: '[System Instructions]\nYou are an expert code reviewer who provides constructive feedback on algorithmic approaches.' },
+        { role: 'assistant', content: 'Understood. I will provide constructive code review feedback.' },
         { role: 'user', content: prompt }
       ];
 
@@ -202,7 +206,8 @@ Examples of good format:
 Focus on problems that fill gaps or provide different perspectives on the same concepts. MUST include working links to LeetCode or GeeksforGeeks.`;
 
           const messages: ChatMessage[] = [
-            { role: 'assistant', content: 'You are a coding education expert who recommends complementary practice problems.' },
+            { role: 'user', content: '[System Instructions]\nYou are a coding education expert who recommends complementary practice problems.' },
+            { role: 'assistant', content: 'Understood. I will recommend complementary practice problems.' },
             { role: 'user', content: prompt }
           ];
 
@@ -298,15 +303,18 @@ Guidelines:
    */
   private static async makeAPICall(
     messages: ChatMessage[],
-    maxTokens: number = 1000
+    maxTokens: number = 1000,
+    modelIndex: number = 0
   ): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('OpenRouter API key not configured');
     }
 
+    const model = this.MODELS[modelIndex] ?? this.MODELS[0];
+
     const requestBody = {
-      model: this.MODEL_NAME,
+      model,
       messages,
       max_tokens: maxTokens,
       temperature: 0.7,
@@ -327,6 +335,11 @@ Guidelines:
 
       if (!response.ok) {
         const errorText = await response.text();
+        // Try next model if rate-limited or model unavailable
+        if ((response.status === 429 || response.status === 503) && modelIndex < this.MODELS.length - 1) {
+          console.warn(`🔄 OpenRouter: Model ${model} unavailable (${response.status}), trying ${this.MODELS[modelIndex + 1]}`);
+          return this.makeAPICall(messages, maxTokens, modelIndex + 1);
+        }
         throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorText}`);
       }
 
@@ -338,6 +351,11 @@ Guidelines:
 
       return data.choices[0].message.content;
     } catch (error) {
+      // Also retry on network errors with next model
+      if (modelIndex < this.MODELS.length - 1 && error instanceof TypeError) {
+        console.warn(`🔄 OpenRouter: Network error with ${model}, trying ${this.MODELS[modelIndex + 1]}`);
+        return this.makeAPICall(messages, maxTokens, modelIndex + 1);
+      }
       console.error('OpenRouter API Error:', error);
       throw error;
     }

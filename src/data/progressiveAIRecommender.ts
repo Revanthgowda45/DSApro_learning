@@ -1,5 +1,6 @@
 import { dsaProblems } from './dsaDatabase';
 import type { Problem } from './dsaDatabase';
+import { HindsightService } from '../services/hindsightService';
 
 // Progressive Learning System with Persistent Problem Tracking
 export interface ProgressiveUserProgress {
@@ -156,6 +157,9 @@ export class ProgressiveAIRecommender {
   
   private allProblems = dsaProblems;
 
+  // 🧠 Hindsight: weak topics recalled from agent memory (populated by applyHindsightEnrichment)
+  private hindsightWeakTopics: string[] = [];
+
   // Getter to access updated user progress
   getUserProgress(): ProgressiveUserProgress {
     return this.userProgress;
@@ -176,6 +180,24 @@ export class ProgressiveAIRecommender {
 
     // Create new daily recommendations
     return this.createDailyRecommendations(today);
+  }
+
+  /**
+   * 🧠 HINDSIGHT ENRICHMENT
+   * Call this once after constructing the recommender with the userId.
+   * It pulls the user's weak areas from Hindsight memory and biases
+   * problem selection toward topics the user actually struggles with.
+   */
+  async applyHindsightEnrichment(userId: string): Promise<void> {
+    try {
+      const weakTopics = await HindsightService.recallWeakAreas(userId);
+      if (weakTopics.length > 0) {
+        this.hindsightWeakTopics = weakTopics;
+        console.log('🧠 Hindsight enrichment applied. Weak topics:', weakTopics);
+      }
+    } catch (err) {
+      console.warn('Hindsight enrichment not available (offline or not configured):', err);
+    }
   }
 
   private createDailyRecommendations(date: string): DailyRecommendation {
@@ -299,17 +321,35 @@ export class ProgressiveAIRecommender {
       ? appropriateProblems 
       : unsolvedProblems;
 
-    return this.selectDiverseProblems(problemsToSelect, count);
+    // Shuffle problems to prevent returning the same exact default problems from top of list
+    const shuffledProblems = [...problemsToSelect].sort(() => Math.random() - 0.5);
+
+    return this.selectDiverseProblems(shuffledProblems, count);
   }
 
   private selectDiverseProblems(problems: Problem[], count: number): Problem[] {
+    // 🧠 If Hindsight has told us the user's weak areas, boost those topics first
+    const hindsightBoosted = this.hindsightWeakTopics.length > 0
+      ? problems.sort((a, b) => {
+          const aWeak = this.hindsightWeakTopics.some(t =>
+            a.category?.toLowerCase().includes(t.toLowerCase())
+          );
+          const bWeak = this.hindsightWeakTopics.some(t =>
+            b.category?.toLowerCase().includes(t.toLowerCase())
+          );
+          if (aWeak && !bWeak) return -1;
+          if (!aWeak && bWeak) return 1;
+          return 0;
+        })
+      : problems;
+
     // Ensure diversity in topics and companies
     const selected: Problem[] = [];
     const usedTopics = new Set<string>();
     const usedCompanies = new Set<string>();
 
     // First pass: select problems with diverse topics
-    for (const problem of problems) {
+    for (const problem of hindsightBoosted) {
       if (selected.length >= count) break;
       
       if (!usedTopics.has(problem.category)) {

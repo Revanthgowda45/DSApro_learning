@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Terminal, Save, FileText, Settings, Maximize, Minimize, Download, Copy, CheckCircle, XCircle, Sun, Moon, Monitor, Trash2, Edit3 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Terminal, Save, FileText, Settings, Maximize, Minimize, Download, Copy, CheckCircle, XCircle, Sun, Moon, Monitor, Trash2, Edit3, Brain, Sparkles } from 'lucide-react';
 import PistonService, { ExecutionResult } from '../services/pistonService';
 import CodeEditor from '../components/ui/CodeEditor';
 import LanguageSelector from '../components/ui/LanguageSelector';
@@ -7,6 +7,8 @@ import DSALogo from '../components/ui/DSALogo';
 import StreamingTerminal from '../components/ui/StreamingTerminal';
 import { useAuth } from '../context/AuthContext';
 import { codeFilesService, CodeFile } from '../services/codeFilesService';
+import { HindsightService } from '../services/hindsightService';
+import { GroqAIService } from '../services/groqAIService';
 
 const CodeEditorPage: React.FC = () => {
   const { user } = useAuth();
@@ -42,8 +44,9 @@ const CodeEditorPage: React.FC = () => {
   const [memoryUsage, setMemoryUsage] = useState<string>('');
   const [savedFiles, setSavedFiles] = useState<CodeFile[]>([]);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | 'saving'>('saved');
+  const [aiDebugHint, setAiDebugHint] = useState<string>('');
+  const [isDetectingHint, setIsDetectingHint] = useState(false);
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
-    // Check localStorage or default to system
     const saved = localStorage.getItem('codeEditorTheme');
     if (saved && ['light', 'dark', 'system'].includes(saved)) {
       return saved as 'light' | 'dark' | 'system';
@@ -314,6 +317,7 @@ const CodeEditorPage: React.FC = () => {
     setIsRunning(true);
     setCodeOutput('');
     setCodeError('');
+    setAiDebugHint('');
     setInteractiveMode(false);
     setTerminalHistory([]);
     const startTime = Date.now();
@@ -358,6 +362,8 @@ const CodeEditorPage: React.FC = () => {
     setTerminalHistory(prev => [...prev, { type: 'output', content: '⚡ Executing with your input...' }]);
     
     const startTime = Date.now();
+    setAiDebugHint('');
+    
     try {
       // Format input for different languages
       let formattedInput = input;
@@ -396,9 +402,32 @@ const CodeEditorPage: React.FC = () => {
     setUserCode(language?.defaultCode || '');
     setCodeOutput('');
     setCodeError('');
+    setAiDebugHint('');
     setCurrentFileName(`untitled.${getFileExtension(selectedLanguage)}`);
     setSaveStatus('unsaved');
     setCurrentFileId(null); // Reset file ID when clearing
+  };
+
+  const getDebugHint = async () => {
+    if (!user?.id || !codeError || !userCode) return;
+    
+    setIsDetectingHint(true);
+    try {
+      // 1. Remember this code attempt mistake in Hindsight
+      await HindsightService.retainCodeAttempt(user.id, currentFileName || 'unknown-problem', selectedLanguage, 'Debugging', false);
+      
+      // 2. Recall user's learning context for personalized hint
+      const context = await HindsightService.reflectOnLearning(user.id);
+      
+      // 3. Generate hint
+      const hint = await GroqAIService.generateDebugHint(codeError, userCode, context);
+      setAiDebugHint(hint);
+    } catch (err) {
+      console.error('Debug hint failed:', err);
+      setAiDebugHint("I couldn't analyze the error right now. Make sure your context is clear and check the stack trace!");
+    } finally {
+      setIsDetectingHint(false);
+    }
   };
 
   // Silent auto-save function (no visual feedback)
@@ -1076,21 +1105,56 @@ const CodeEditorPage: React.FC = () => {
                             )}
                           </div>
                         ) : codeError ? (
-                          <div className="space-y-2">
-                            <div className="text-red-400 font-semibold flex items-center space-x-2">
-                              <XCircle className="w-4 h-4" />
-                              <span>EXECUTION FAILED</span>
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <div className="text-red-400 font-semibold flex items-center space-x-2">
+                                <XCircle className="w-4 h-4" />
+                                <span>EXECUTION FAILED</span>
+                              </div>
+                              <div className="text-red-300 whitespace-pre-wrap leading-relaxed border-l-2 border-red-500/50 pl-3">
+                                {codeError.split('\n').map((line, index) => (
+                                  <div key={index} className="flex text-xs">
+                                    <span className="break-all">{line}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                            <div className="text-red-300 whitespace-pre-wrap leading-relaxed">
-                              {codeError.split('\n').map((line, index) => (
-                                <div key={index} className="flex text-xs">
-                                  <span className="text-red-500 mr-2 flex-shrink-0">
-                                    {line.includes('Line') ? '⚠' : line.includes('Error') ? '✗' : '│'}
-                                  </span>
-                                  <span className="break-all">{line}</span>
-                                </div>
-                              ))}
-                            </div>
+                            
+                            {/* AI Mentor Debugging Help block */}
+                            {user && HindsightService.isConfigured() && GroqAIService.isConfigured() && (
+                              <div className="mt-4 p-3 bg-indigo-900/30 border border-indigo-500/30 rounded-lg">
+                                {!aiDebugHint && !isDetectingHint ? (
+                                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 text-indigo-300">
+                                      <Brain className="w-4 h-4" />
+                                      <span className="text-xs font-medium">Stuck on this error?</span>
+                                    </div>
+                                    <button 
+                                      onClick={getDebugHint}
+                                      className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors"
+                                    >
+                                      <Sparkles className="w-3 h-3" />
+                                      Ask AI Mentor
+                                    </button>
+                                  </div>
+                                ) : isDetectingHint ? (
+                                  <div className="flex items-center gap-2 text-indigo-300 text-xs">
+                                    <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                    Analyzing your code and past mistakes...
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2 text-xs">
+                                    <div className="flex items-center gap-1.5 text-indigo-300 font-medium">
+                                      <Brain className="w-3.5 h-3.5" />
+                                      AI Mentor Suggestion
+                                    </div>
+                                    <div className="text-indigo-100 leading-relaxed pl-5 border-l-2 border-indigo-500/30">
+                                      {aiDebugHint}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="space-y-2">

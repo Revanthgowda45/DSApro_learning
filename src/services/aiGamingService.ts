@@ -2,6 +2,8 @@
  * Professional AI Gaming Service
  * Advanced AI-powered coding challenge platform with gaming mechanics
  */
+import { GroqAIService } from './groqAIService';
+import { HindsightService } from './hindsightService';
 
 // Types and Interfaces
 export interface GameChallenge {
@@ -164,17 +166,61 @@ export class AIGamingService {
     return import.meta.env.VITE_OPENROUTER_API_KEY || '';
   }
 
-  private static get GEMINI_API_KEY(): string {
-    return import.meta.env.VITE_GEMINI_API_KEY || '';
-  }
-
   /**
    * Initialize service
    */
   static initialize(): boolean {
-    const hasProviders = !!(this.OPENROUTER_API_KEY || this.GEMINI_API_KEY);
-    console.log(`🚀 AI Gaming Service ${hasProviders ? 'initialized' : 'using fallback mode'}`);
+    const hasGroq = GroqAIService.isConfigured();
+    const hasProviders = !!(hasGroq || this.OPENROUTER_API_KEY);
     return hasProviders;
+  }
+
+  /**
+   * 🧠 HINDSIGHT + GROQ powered challenge generation
+   * Uses Hindsight to find what the user needs to practice,
+   * then uses Groq to generate the challenge at LPU speed.
+   */
+  static async generateChallengeWithHindsight(
+    userId: string,
+    userLevel: string,
+    difficulty: 'easy' | 'medium' | 'hard'
+  ): Promise<GameChallenge | null> {
+    try {
+      // 1. Ask Hindsight what topic to focus on today
+      const focusTopic = await HindsightService.reflectForChallengeTopic(userId);
+      const insight = await HindsightService.reflectOnLearning(userId);
+
+      // 2. Use Groq to generate a challenge on that topic (fast!)
+      const groqChallenge = await GroqAIService.generateDailyChallenge(
+        userLevel,
+        focusTopic,
+        insight
+      );
+
+      // 3. Package it as a GameChallenge
+      const config = this.GAMING_CONFIG;
+      return {
+        id: `hindsight-${Date.now()}`,
+        title: groqChallenge.title,
+        description: groqChallenge.description,
+        difficulty,
+        category: focusTopic,
+        hints: [
+          `Think about the key patterns in ${focusTopic}`,
+          `Consider edge cases: empty input, single element, negatives`,
+          `Groq hint: ${groqChallenge.constraints}`,
+        ],
+        solution: '',
+        explanation: groqChallenge.examples,
+        points: config.POINTS[difficulty],
+        timeLimit: config.TIME_LIMITS[difficulty],
+        perfectTime: config.PERFECT_TIME[difficulty],
+        tags: [focusTopic, 'hindsight-personalized', 'groq-generated'],
+      };
+    } catch (err) {
+      console.warn('🧠 Hindsight+Groq challenge generation failed, falling back:', err);
+      return null;
+    }
   }
 
   /**
@@ -185,24 +231,20 @@ export class AIGamingService {
     category: string,
     userLevel: number = 1
   ): Promise<GameChallenge> {
-    console.log(`🎯 Generating ${difficulty} ${category} challenge`);
 
     try {
       const aiChallenge = await this.generateAIChallenge(difficulty, category, userLevel);
       if (aiChallenge) {
-        console.log('✅ AI challenge generated:', aiChallenge.title);
         return aiChallenge;
       }
     } catch (error) {
-      console.warn('⚠️ AI generation failed:', error);
     }
 
-    console.log('🔄 Using DSA dataset fallback');
     return await this.getDSAChallenge(difficulty, category);
   }
 
   /**
-   * Generate AI challenge
+   * Generate AI challenge – Groq first → OpenRouter free models → DSA fallback
    */
   private static async generateAIChallenge(
     difficulty: 'easy' | 'medium' | 'hard',
@@ -210,37 +252,82 @@ export class AIGamingService {
     userLevel: number
   ): Promise<GameChallenge | null> {
     const prompt = this.createChallengePrompt(difficulty, category, userLevel);
-    
-    // Try OpenRouter first
-    if (this.OPENROUTER_API_KEY) {
+
+    // 1️⃣  Try Groq (primary – LPU ultra-fast)
+    if (GroqAIService.isConfigured()) {
       try {
-        const response = await this.callOpenRouter(prompt);
+        const response = await this.callGroq(prompt);
         if (response.success && response.data) {
           return this.parseAIResponse(response.data, difficulty, category);
         }
       } catch (error) {
-        console.warn('OpenRouter failed, trying Gemini:', error);
       }
     }
 
-    // Try Gemini as fallback
-    if (this.GEMINI_API_KEY) {
-      try {
-        const response = await this.callGemini(prompt);
-        if (response.success && response.data) {
-          return this.parseAIResponse(response.data, difficulty, category);
+    // 2️⃣  Try OpenRouter free model chain
+    if (this.OPENROUTER_API_KEY) {
+      const freeModels = [
+        'arcee-ai/trinity-large-preview:free',
+        'z-ai/glm-4.5-air:free',
+        'stepfun/step-3.5-flash:free',
+        'nvidia/nemotron-nano-12b-v2-vl:free',
+        'openrouter/auto',
+      ];
+      for (const model of freeModels) {
+        try {
+          const response = await this.callOpenRouter(prompt, model);
+          if (response.success && response.data) {
+            return this.parseAIResponse(response.data, difficulty, category);
+          }
+        } catch (error) {
         }
-      } catch (error) {
-        console.warn('Gemini also failed:', error);
       }
     }
 
     return null;
   }
 
-  private static async callOpenRouter(prompt: string): Promise<AIResponse> {
+  /** Call Groq API – llama-3.3-70b first, then llama-3.1-8b-instant */
+  private static async callGroq(prompt: string): Promise<AIResponse> {
+    const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+    if (!groqKey) return { success: false, error: 'No Groq key', provider: 'Groq' };
+
+    const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+    for (const model of models) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 2000,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          return { success: true, data: data.choices?.[0]?.message?.content, provider: 'Groq' };
+        }
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+      }
+    }
+    return { success: false, error: 'All Groq models failed', provider: 'Groq' };
+  }
+
+  /** Call a specific OpenRouter model */
+  private static async callOpenRouter(prompt: string, model: string): Promise<AIResponse> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -249,78 +336,34 @@ export class AIGamingService {
           'Authorization': `Bearer ${this.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': window.location.origin,
+          'X-Title': 'DSA Pro',
         },
         body: JSON.stringify({
-          model: 'anthropic/claude-3.5-sonnet',
+          model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_tokens: 2000,
         }),
-        signal: controller.signal
+        signal: controller.signal,
       });
-
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`OpenRouter API error: ${response.status}`);
+        throw new Error(`OpenRouter ${model} error: ${response.status}`);
       }
 
       const data = await response.json();
       return {
         success: true,
         data: data.choices?.[0]?.message?.content,
-        provider: 'OpenRouter'
+        provider: `OpenRouter/${model}`
       };
     } catch (error) {
       clearTimeout(timeoutId);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        provider: 'OpenRouter'
-      };
-    }
-  }
-
-  private static async callGemini(prompt: string): Promise<AIResponse> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${this.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2000,
-          }
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        success: true,
-        data: data.candidates?.[0]?.content?.parts?.[0]?.text,
-        provider: 'Gemini'
-      };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        provider: 'Gemini'
+        provider: `OpenRouter/${model}`
       };
     }
   }
@@ -360,7 +403,7 @@ export class AIGamingService {
         .replace(/'/g, "'") // Fix smart quotes
         .replace(/'/g, "'"); // Fix smart quotes
 
-      console.log('🧹 Cleaned AI response for parsing');
+
       
       const parsed = JSON.parse(cleanedText);
       
@@ -378,7 +421,6 @@ export class AIGamingService {
         perfectTime: this.GAMING_CONFIG.PERFECT_TIME[difficulty],
       };
     } catch (error) {
-      console.warn('Failed to parse AI response, trying manual extraction:', error);
       return this.extractFieldsManually(responseText, difficulty, category);
     }
   }
@@ -422,7 +464,6 @@ export class AIGamingService {
       const hints = extractArray('hints');
 
       if (title && description) {
-        console.log('✅ Manual extraction successful');
         return {
           id: `ai-manual-${Date.now()}`,
           title,
@@ -936,15 +977,14 @@ RESPOND WITH DETAILED JSON:
   "reasoning": "Detailed explanation of score calculation with breakdown"
 }`;
 
-      console.log('🤖 Attempting AI evaluation with professional standards...');
+
 
       // Try OpenRouter first
       if (this.OPENROUTER_API_KEY) {
-        const response = await this.callOpenRouter(prompt);
+        const response = await this.callOpenRouter(prompt, 'arcee-ai/trinity-large-preview:free');
         if (response.success && response.data) {
           try {
             const evaluation = JSON.parse(response.data);
-            console.log('✅ AI evaluation successful:', evaluation);
             
             // Apply additional realistic penalties
             let finalScore = evaluation.score || 0;
@@ -963,48 +1003,37 @@ RESPOND WITH DETAILED JSON:
               spaceComplexity: evaluation.spaceComplexity,
             };
           } catch (parseError) {
-            console.warn('❌ Failed to parse AI evaluation, trying manual extraction...');
             return this.extractEvaluationFieldsManually(response.data, hintsUsed, timeSpent, challenge.timeLimit);
           }
         }
       }
 
-      // Try Gemini as fallback
-      if (this.GEMINI_API_KEY) {
-        console.log('🔄 Trying Gemini as fallback...');
-        const response = await this.callGemini(prompt);
-        if (response.success && response.data) {
-          try {
-            const evaluation = JSON.parse(response.data);
-            console.log('✅ Gemini evaluation successful:', evaluation);
-            
-            let finalScore = evaluation.score || 0;
-            finalScore -= (hintsUsed * 10);
-            if (timeSpent > challenge.timeLimit) {
-              finalScore -= 15;
-            }
-            finalScore = Math.max(finalScore, 0);
-            
-            return {
-              isCorrect: evaluation.isCorrect && finalScore >= 70,
-              score: Math.round(finalScore),
-              feedback: evaluation.feedback || 'No detailed feedback available',
-              suggestions: evaluation.suggestions || ['Review the solution approach', 'Practice similar problems'],
-              timeComplexity: evaluation.timeComplexity,
-              spaceComplexity: evaluation.spaceComplexity,
-            };
-          } catch (parseError) {
-            console.warn('❌ Failed to parse Gemini evaluation, trying manual extraction...');
-            return this.extractEvaluationFieldsManually(response.data, hintsUsed, timeSpent, challenge.timeLimit);
-          }
+      // Try Groq as fallback
+      const groqResp = await this.callGroq(prompt);
+      if (groqResp.success && groqResp.data) {
+        try {
+          const evaluation = JSON.parse(groqResp.data);
+          let finalScore = evaluation.score || 0;
+          finalScore -= (hintsUsed * 10);
+          if (timeSpent > challenge.timeLimit) finalScore -= 15;
+          finalScore = Math.max(finalScore, 0);
+          return {
+            isCorrect: evaluation.isCorrect && finalScore >= 70,
+            score: Math.round(finalScore),
+            feedback: evaluation.feedback || 'No detailed feedback available',
+            suggestions: evaluation.suggestions || ['Review the solution approach', 'Practice similar problems'],
+            timeComplexity: evaluation.timeComplexity,
+            spaceComplexity: evaluation.spaceComplexity,
+          };
+        } catch (parseError) {
+          return this.extractEvaluationFieldsManually(groqResp.data, hintsUsed, timeSpent, challenge.timeLimit);
         }
       }
 
       // Enhanced fallback evaluation
-      console.log('⚠️ AI evaluation failed, using enhanced fallback...');
       return this.realisticBasicEvaluation(userSolution, timeSpent, challenge.timeLimit, hintsUsed, challenge.difficulty);
     } catch (error) {
-      console.error('❌ Solution evaluation failed:', error);
+      console.error('Solution evaluation failed:', error);
       return this.realisticBasicEvaluation(userSolution, timeSpent, challenge.timeLimit, hintsUsed, challenge.difficulty);
     }
   }
@@ -1015,7 +1044,7 @@ RESPOND WITH DETAILED JSON:
     timeSpent: number,
     timeLimit: number
   ): SolutionEvaluation {
-    console.log('🔧 Attempting manual field extraction from AI response...');
+
     
     try {
       // Extract fields using regex patterns
@@ -1489,7 +1518,7 @@ USER PROGRESS: ${progress}
 Give a constructive hint without revealing the solution.`;
 
       if (this.OPENROUTER_API_KEY) {
-        const response = await this.callOpenRouter(prompt);
+        const response = await this.callOpenRouter(prompt, 'arcee-ai/trinity-large-preview:free');
         if (response.success && response.data) {
           return response.data.trim();
         }

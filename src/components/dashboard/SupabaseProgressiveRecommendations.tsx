@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Clock, Brain, Target, ExternalLink, CheckCircle, Wifi, WifiOff, User, TrendingUp, Lightbulb, Sparkles } from 'lucide-react';
+import { Clock, Brain, Target, ExternalLink, CheckCircle, Wifi, WifiOff, User, TrendingUp, Lightbulb, Sparkles, Terminal, RotateCcw } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ProblemProgressService } from '../../services/problemProgressService';
 import { SupabaseAuthService } from '../../services/supabaseAuthService';
 import { UserSessionService } from '../../services/userSessionService';
 import { DailyRecommendationsService } from '../../services/dailyRecommendationsService';
-import GeminiRecommendationsService from '../../services/geminiRecommendationsService';
-import type { GeminiSmartRecommendation } from '../../services/geminiRecommendationsService';
+// AI Recommendations now powered by Groq + OpenRouter (Gemini removed)
 import { supabase } from '../../lib/supabase';
 import { 
   getProgressiveDailyRecommendations, 
@@ -116,15 +116,6 @@ function calculateActiveDays(problemProgress: any[], userCreatedAt?: string): nu
     
     const diffInMs = todayDate.getTime() - created.getTime();
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24)) + 1; // +1 because creation day = Day 1
-    
-    console.log('🐛 Day calculation debug:', {
-      userCreatedAt,
-      createdDate,
-      today,
-      diffInMs,
-      diffInDays,
-      finalResult: Math.max(1, diffInDays)
-    });
     
     return Math.max(1, diffInDays);
   }
@@ -833,12 +824,7 @@ export default function SupabaseProgressiveRecommendations() {
   const [aiProcessing, setAiProcessing] = useState(false);
   const [showAiRecommendations, setShowAiRecommendations] = useState<boolean>(false);
   
-  // Gemini AI State
-  const [geminiRecommendations, setGeminiRecommendations] = useState<GeminiSmartRecommendation[]>([]);
-  const [geminiInsights, setGeminiInsights] = useState<any>(null);
-  const [geminiProcessing, setGeminiProcessing] = useState(false);
-  const [showGeminiRecommendations, setShowGeminiRecommendations] = useState<boolean>(false);
-  // Remove the aiRecommendationsEnabled state since we're using simple hide/show
+  // Removed aiRecommendationsEnabled state and smart recommendations state
 
   useEffect(() => {
     // Listen for online/offline status
@@ -874,7 +860,6 @@ export default function SupabaseProgressiveRecommendations() {
     if (!user || !isOnline) return;
 
     const subscription = ProblemProgressService.subscribeToProgress(user.id, (payload) => {
-      console.log('🔄 Real-time update received:', payload);
       // Reload data when changes occur
       loadSupabaseData();
     });
@@ -919,8 +904,35 @@ export default function SupabaseProgressiveRecommendations() {
       setMotivationalMessage(message);
       
     } catch (error) {
-      console.error('❌ Error loading local data:', error);
+      console.error('Error loading local data:', error);
     } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshDailyRecommendations = async () => {
+    setIsLoading(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      if (user && isOnline && supabase) {
+        // Delete today's recommendation from DB so it forces a fresh random generation
+        await supabase
+          .from('daily_recommendations')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('date', today);
+      }
+      
+      // Clear from local state
+      const updatedProgress = { ...userProgress };
+      updatedProgress.dailyRecommendations = updatedProgress.dailyRecommendations.filter(rec => rec.date !== today);
+      setUserProgress(updatedProgress);
+      localStorage.setItem('progressiveUserProgress', JSON.stringify(updatedProgress));
+
+      // Reload
+      await loadSupabaseData();
+    } catch (err) {
+      console.error('Error refreshing recommendations', err);
       setIsLoading(false);
     }
   };
@@ -934,8 +946,6 @@ export default function SupabaseProgressiveRecommendations() {
     setIsLoading(true);
     
     try {
-      console.log('🔄 Loading real-time data from Supabase...');
-      
       // Get user preferences from Supabase profile
       const userProfile = await SupabaseAuthService.getProfile(user.id);
       const preferences: UserPreferences = {
@@ -959,13 +969,6 @@ export default function SupabaseProgressiveRecommendations() {
       const authUser = await supabase?.auth.getUser();
       const userCreatedAt = authUser?.data?.user?.created_at;
       
-      console.log('🐛 Auth user debug:', {
-        userId: user.id,
-        authUserId: authUser?.data?.user?.id,
-        userCreatedAt,
-        authUserEmail: authUser?.data?.user?.email
-      });
-      
       // Calculate real progress from Supabase data
       const updatedProgress: ProgressiveUserProgress = {
         ...defaultProgressiveProgress,
@@ -980,16 +983,6 @@ export default function SupabaseProgressiveRecommendations() {
       
       setUserProgress(updatedProgress);
       
-      // Check Supabase connection and user mode
-      console.log('🔍 Checking Supabase user mode:', {
-        userId: user.id,
-        userEmail: user.email,
-        isOnline,
-        supabaseConfigured: !!supabase,
-        completedProblemsCount: completed.size,
-        userCreatedAt
-      });
-      
       // Verify user exists in Supabase profiles table
       try {
         if (supabase) {
@@ -1000,27 +993,15 @@ export default function SupabaseProgressiveRecommendations() {
             .single();
             
           if (profileResponse.error) {
-            console.warn('⚠️ User profile not found in Supabase:', profileResponse.error);
-          } else {
-            console.log('✅ User profile verified in Supabase:', profileResponse.data);
+            // Profile not found
           }
-        } else {
-          console.warn('⚠️ Supabase not configured');
         }
       } catch (error) {
-        console.error('❌ Error checking user profile:', error);
+        console.error('Error checking user profile:', error);
       }
       
       // Get persistent daily recommendations from Supabase
       let dailyRec = await DailyRecommendationsService.getTodaysRecommendations(user.id);
-      
-      console.log('📊 Daily recommendations check:', {
-        hasExistingRecommendations: !!dailyRec,
-        recommendationDate: dailyRec?.date,
-        problemsCount: dailyRec?.problems?.length || 0,
-        completedCount: dailyRec?.completed || 0,
-        status: dailyRec?.status || 'none'
-      });
       
       // Check daily_recommendations table structure and recent data
       try {
@@ -1033,23 +1014,15 @@ export default function SupabaseProgressiveRecommendations() {
             .limit(3);
             
           if (recentError) {
-            console.error('❌ Error checking recent recommendations:', recentError);
-          } else {
-            console.log('📊 Recent recommendations in Supabase:', {
-              count: recentRecs?.length || 0,
-              dates: recentRecs?.map(r => r.date) || [],
-              statuses: recentRecs?.map(r => r.status) || [],
-              problemCounts: recentRecs?.map(r => r.problems?.length || 0) || []
-            });
+            console.error('Error checking recent recommendations:', recentError);
           }
         }
       } catch (error) {
-        console.error('❌ Error checking daily_recommendations table:', error);
+        console.error('Error checking daily_recommendations table:', error);
       }
       
       if (!dailyRec) {
         // No recommendations for today, generate new ones
-        console.log('📅 Generating new daily recommendations for today');
         
         // Create updated progress with current solved problems for accurate filtering
         const progressWithSolvedProblems = {
@@ -1070,27 +1043,16 @@ export default function SupabaseProgressiveRecommendations() {
           dailyRec.totalTarget = dailyRec.problems.length;
         }
         
-        console.log('✅ Generated recommendations with solved problems filtered:', {
-          totalProblems: dailyRec.problems.length,
-          newProblems: dailyRec.newProblems.length,
-          carryOverProblems: dailyRec.carryOverProblems.length,
-          solvedProblemsExcluded: completed.size
-        });
-        
         // Save to Supabase for persistence
         await DailyRecommendationsService.saveDailyRecommendations(user.id, dailyRec);
       } else {
-        console.log('📅 Retrieved existing daily recommendations from Supabase');
-        
         // DON'T filter out solved problems - keep them visible with solved status
         // This prevents problems from disappearing when marked as solved
-        console.log('📋 Keeping all recommended problems visible, including solved ones');
         
         // Only regenerate if ALL problems are solved and we need fresh recommendations
         const allProblemsSolved = dailyRec.problems.every(problem => completed.has(problem.id));
         
         if (allProblemsSolved && dailyRec.problems.length > 0) {
-          console.log('🎉 All daily problems completed! Generating bonus recommendations');
           
           const progressWithSolvedProblems = {
             ...updatedProgress,
@@ -1114,7 +1076,7 @@ export default function SupabaseProgressiveRecommendations() {
             // Save updated recommendations to Supabase
             await DailyRecommendationsService.saveDailyRecommendations(user.id, dailyRec);
             
-            console.log('✨ Added bonus problems for completed daily target');
+
           }
         }
         
@@ -1148,15 +1110,6 @@ export default function SupabaseProgressiveRecommendations() {
       
       setLastSyncTime(new Date());
       
-      console.log('✅ Real-time Supabase data loaded:', {
-        user: user.full_name,
-        learning_pace: preferences.learning_pace,
-        completed_problems: completed.size,
-        daily_time_limit: preferences.daily_time_limit,
-        difficulty_preferences: preferences.difficulty_preferences,
-        available_recommendations: dailyRec?.problems.length || 0
-      });
-      
       // Process advanced AI analytics in background (non-blocking)
       const userSessions = await UserSessionService.getUserSessions(user.id, undefined, undefined);
       
@@ -1166,7 +1119,7 @@ export default function SupabaseProgressiveRecommendations() {
       }, 100); // Small delay to not block initial render
       
     } catch (error) {
-      console.error('❌ Error loading Supabase data, falling back to localStorage:', error);
+      console.error('Error loading Supabase data, falling back to localStorage:', error);
       loadLocalData();
     } finally {
       setIsLoading(false);
@@ -1186,7 +1139,6 @@ export default function SupabaseProgressiveRecommendations() {
     if (cached) {
       const { data, timestamp } = JSON.parse(cached);
       if (now - timestamp < 300000) { // 5 minutes
-        console.log('📦 Using cached AI analytics');
         setLearningPattern(data.learningPattern);
         setCognitiveLoad(data.cognitiveLoad);
         setPredictiveAnalytics(data.predictiveAnalytics);
@@ -1199,8 +1151,6 @@ export default function SupabaseProgressiveRecommendations() {
     setAiProcessing(true);
     
     try {
-      console.log('🧠 Processing advanced AI analytics (background)...');
-      
       // Process in chunks with delays to prevent blocking
       const processChunk = (fn: () => any, delay: number) => {
         return new Promise(resolve => {
@@ -1255,18 +1205,8 @@ export default function SupabaseProgressiveRecommendations() {
       };
       localStorage.setItem(cacheKey, JSON.stringify(cacheData));
       
-      // Smart recommendations will be generated manually when user clicks the button
-      
-      console.log('✅ Advanced AI processing complete (cached):', {
-        learningPattern: pattern,
-        cognitiveLoad: cognitive,
-        predictiveAnalytics: analytics,
-        adaptiveDifficulty: difficulty,
-        mlInsights: insights
-      });
-      
     } catch (error) {
-      console.error('❌ Error in advanced AI processing:', error);
+      console.error('Error in advanced AI processing:', error);
     } finally {
       setAiProcessing(false);
     }
@@ -1290,85 +1230,14 @@ export default function SupabaseProgressiveRecommendations() {
       );
       setSmartRecommendations(smartRecs);
       setShowAiRecommendations(true);
-      console.log('✅ AI recommendations generated:', smartRecs.length);
     } catch (error) {
-      console.error('❌ Error generating AI recommendations:', error);
+      console.error('Error generating AI recommendations:', error);
     } finally {
       setAiProcessing(false);
     }
   }, [dailyRecommendation, userProgress, learningPattern, cognitiveLoad]);
 
-  // Generate Gemini AI Recommendations
-  const generateGeminiRecommendations = useCallback(async () => {
-    if (!dailyRecommendation?.problems || !learningPattern || !cognitiveLoad) {
-      console.warn('Missing required data for Gemini recommendations');
-      return;
-    }
-
-    setGeminiProcessing(true);
-    try {
-      console.log('🤖 Generating Gemini AI recommendations...');
-      
-      // Prepare request data for Gemini
-      const request = {
-        userProgress: {
-          solvedProblems: userProgress.solvedProblems.size,
-          currentStreak: userProgress.currentStreak,
-          activeDays: userProgress.totalActiveDays,
-          level: userProgress.currentLevel?.stage || 1,
-          weakAreas: [], // LearningLevel doesn't have weakAreas, using empty array
-          strongAreas: userProgress.currentLevel?.skillAreas || [], // Using skillAreas instead
-          recentActivity: []
-        },
-        learningPattern: {
-          preferredTopics: learningPattern.preferredTopics,
-          avoidedTopics: learningPattern.avoidedTopics,
-          peakPerformanceHours: learningPattern.peakPerformanceHours,
-          learningVelocity: learningPattern.learningVelocity,
-          retentionRate: learningPattern.retentionRate,
-          consistencyScore: learningPattern.consistencyScore
-        },
-        cognitiveLoad: {
-          currentLoad: cognitiveLoad.currentLoad,
-          burnoutRisk: cognitiveLoad.burnoutRisk,
-          fatigueLevel: cognitiveLoad.fatigueLevel,
-          concentrationScore: cognitiveLoad.concentrationScore
-        },
-        availableProblems: dailyRecommendation.problems,
-        targetCount: 6
-      };
-
-      const response = await GeminiRecommendationsService.generateSmartRecommendations(request);
-      
-      if (response.success && response.data) {
-        setGeminiRecommendations(response.data.recommendations);
-        setGeminiInsights(response.data.insights);
-        setShowGeminiRecommendations(true);
-        console.log(`✅ Gemini recommendations generated: ${response.data.recommendations.length} problems`);
-      } else {
-        console.warn('⚠️ Gemini failed, using fallback recommendations');
-        const fallbackRecs = GeminiRecommendationsService.getFallbackRecommendations(
-          dailyRecommendation.problems,
-          userProgress,
-          6
-        );
-        setGeminiRecommendations(fallbackRecs);
-        setShowGeminiRecommendations(true);
-      }
-    } catch (error) {
-      console.error('❌ Error generating Gemini recommendations:', error);
-      // Use fallback recommendations on error
-      const fallbackRecs = GeminiRecommendationsService.getFallbackRecommendations(
-        dailyRecommendation.problems,
-        userProgress,
-        6
-      );
-      setGeminiRecommendations(fallbackRecs);
-      setShowGeminiRecommendations(true);
-    } finally {
-      setGeminiProcessing(false);
-    }
-  }, [dailyRecommendation, userProgress, learningPattern, cognitiveLoad]);
+  // Removed redundant generateSmartRecommendations
   
   // Memoized AI insights for performance
   const aiInsights = useMemo(() => {
@@ -1386,7 +1255,6 @@ export default function SupabaseProgressiveRecommendations() {
 
   const handleProblemSolved = async (problemId: string) => {
     try {
-      console.log('🎯 Marking problem as solved:', problemId);
       
       // Update local state immediately for UI responsiveness
       const updatedProgress = { ...userProgress };
@@ -1425,34 +1293,27 @@ export default function SupabaseProgressiveRecommendations() {
               problem.category,
               timeSpent
             );
-            console.log('✅ User session updated for AI analytics');
           }
           
-          console.log('✅ Problem status updated in Supabase:', problemId);
           
           // Refresh AI insights with updated session data
           try {
             const updatedSessions = await UserSessionService.getUserSessions(user.id);
             const problemProgress = await ProblemProgressService.getUserProgress(user.id);
             await processAdvancedAI(problemProgress, updatedSessions);
-            console.log('🧠 AI insights refreshed with new session data');
           } catch (aiError) {
-            console.warn('⚠️ Failed to refresh AI insights:', aiError);
+            // AI refresh failed, non-critical
           }
           
-          // Don't reload data - keep the green styling visible
-          console.log('🟢 Problem will remain visible with green styling');
-          
         } catch (supabaseError) {
-          console.error('⚠️ Failed to update Supabase, but local update succeeded:', supabaseError);
+          console.error('Failed to update Supabase:', supabaseError);
         }
       } else {
-        // Keep local state - don't reload to maintain green styling
-        console.log('🟢 Offline mode: Problem will remain visible with green styling');
+        // Keep local state for offline mode
       }
       
     } catch (error) {
-      console.error('❌ Error marking problem as solved:', error);
+      console.error('Error marking problem as solved:', error);
     }
   };
 
@@ -1670,7 +1531,16 @@ export default function SupabaseProgressiveRecommendations() {
 
         {/* Progressive Learning Path */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 mb-4">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">📚 Progressive Learning Path</h3>
+          <div className="flex items-center space-x-3">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">📚 Progressive Learning Path</h3>
+            <button 
+              onClick={refreshDailyRecommendations} 
+              className="p-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              title="Refresh Daily Recommendations"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          </div>
           <div className="flex items-center space-x-2">
             <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">
               Day {userProgress.totalActiveDays} • {userProgress.currentLevel.name}
@@ -1718,202 +1588,7 @@ export default function SupabaseProgressiveRecommendations() {
           </div>
         )}
 
-        {/* Gemini AI Recommendations Generate Button */}
-        {!showGeminiRecommendations && learningPattern && cognitiveLoad && dailyRecommendation?.problems && (
-          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 min-w-0 flex-1">
-                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <div className="flex items-center space-x-2 min-w-0">
-                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">Gemini AI Recommendations</h4>
-                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
-                    NEW
-                  </span>
-                </div>
-              </div>
-              
-              <button
-                onClick={generateGeminiRecommendations}
-                disabled={geminiProcessing}
-                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 min-h-[36px] flex-shrink-0"
-              >
-                {geminiProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                    <span className="whitespace-nowrap">Analyzing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3 w-3" />
-                    <span className="whitespace-nowrap">Generate</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Gemini AI Recommendations */}
-        {showGeminiRecommendations && geminiRecommendations.length > 0 ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <h4 className="font-medium text-base sm:text-lg text-gray-900 dark:text-gray-100">Gemini AI Smart Recommendations</h4>
-              </div>
-              <button
-                onClick={() => setShowGeminiRecommendations(false)}
-                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[44px] flex items-center justify-center"
-              >
-                Hide
-              </button>
-            </div>
-
-            {/* Gemini Insights */}
-            {geminiInsights && (
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-3 mb-4">
-                <div className="flex items-center space-x-2 mb-2">
-                  <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Gemini Insights</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
-                  <div className="flex flex-col xs:flex-row xs:justify-between space-y-1 xs:space-y-0">
-                    <span className="text-emerald-600 dark:text-emerald-400">Learning Phase:</span>
-                    <span className="font-medium text-emerald-900 dark:text-emerald-100">{geminiInsights.learningPhase}</span>
-                  </div>
-                  <div className="flex flex-col xs:flex-row xs:justify-between space-y-1 xs:space-y-0">
-                    <span className="text-emerald-600 dark:text-emerald-400">User Cluster:</span>
-                    <span className="font-medium text-emerald-900 dark:text-emerald-100">{geminiInsights.userCluster}</span>
-                  </div>
-                </div>
-                <div className="mt-3 p-2 bg-emerald-100 dark:bg-emerald-800/50 rounded-lg">
-                  <div className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 font-medium">
-                    🎯 Next Milestone: {geminiInsights.nextMilestone}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {geminiRecommendations.map((geminiRec) => {
-              const problem = dailyRecommendation.problems.find(p => p.id === geminiRec.problemId);
-              if (!problem) return null;
-
-              const isSolved = completedProblems.has(problem.id);
-              const platformInfo = getPlatformInfo(problem.link);
-              
-              // Simplified confidence display
-              const getConfidenceLabel = (score: number) => {
-                if (score >= 90) return { label: 'Perfect Match', color: 'text-green-600 dark:text-green-400', emoji: '🎯' };
-                if (score >= 80) return { label: 'Great Match', color: 'text-green-600 dark:text-green-400', emoji: '✨' };
-                if (score >= 70) return { label: 'Good Match', color: 'text-blue-600 dark:text-blue-400', emoji: '👍' };
-                return { label: 'Fair Match', color: 'text-yellow-600 dark:text-yellow-400', emoji: '⚡' };
-              };
-              
-              const confidence = getConfidenceLabel(geminiRec.aiConfidence.overall);
-
-              return (
-                <div 
-                  key={geminiRec.problemId}
-                  className={`border rounded-lg p-4 space-y-3 ${
-                    isSolved 
-                      ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20' 
-                      : 'border-emerald-200 dark:border-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10'
-                  }`}
-                >
-                  {/* Header with problem info */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
-                    <div className="flex-1 min-w-0">
-                      <h4 className={`font-medium text-base sm:text-lg leading-tight ${
-                        isSolved 
-                          ? 'text-green-800 dark:text-green-200' 
-                          : 'text-gray-900 dark:text-gray-100'
-                      }`}>
-                        {isSolved && '✅ '}{geminiRec.title}
-                      </h4>
-                      <div className="flex flex-col xs:flex-row xs:items-center xs:space-x-3 space-y-2 xs:space-y-0 mt-3">
-                        <span className={`px-3 py-1.5 rounded-full text-sm font-medium w-fit ${getDifficultyColor(geminiRec.difficulty)}`}>
-                          {geminiRec.difficulty}
-                        </span>
-                        <div className="flex items-center space-x-1 text-sm text-gray-600 dark:text-gray-400">
-                          <Clock className="h-4 w-4 flex-shrink-0" />
-                          <span>{geminiRec.predictedSolveTime} min</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Simplified confidence indicator */}
-                    <div className="flex sm:flex-col items-center sm:items-end space-x-2 sm:space-x-0 sm:text-right">
-                      <div className={`flex items-center space-x-1 text-sm font-medium ${confidence.color}`}>
-                        <span>{confidence.emoji}</span>
-                        <span className="whitespace-nowrap">{confidence.label}</span>
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 sm:mt-1">
-                        {Math.round(geminiRec.aiConfidence.overall)}% Match
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Why Gemini recommends this */}
-                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 border border-emerald-100 dark:border-emerald-800">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                      <span className="text-sm sm:text-base font-medium text-emerald-900 dark:text-emerald-100">Why this problem?</span>
-                    </div>
-                    <p className="text-sm sm:text-base text-emerald-700 dark:text-emerald-300 leading-relaxed">{geminiRec.reasoning}</p>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-                    <div className="flex flex-col xs:flex-row xs:items-center space-y-2 xs:space-y-0 xs:space-x-2">
-                      {isSolved ? (
-                        <div className="flex items-center space-x-2 px-4 py-2.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 rounded-lg text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start">
-                          <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                          <span>✅ Solved</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleProblemSolved(problem.id)}
-                          className="flex items-center space-x-2 px-4 py-2.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-all duration-200 text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start transform hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                          <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                          <span>Mark Solved</span>
-                        </button>
-                      )}
-                      {problem.link && (
-                        <a
-                          href={problem.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center space-x-2 px-4 py-2.5 text-white rounded-lg transition-all duration-200 text-sm font-medium min-h-[44px] w-full xs:w-auto justify-center xs:justify-start transform hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg ${platformInfo.color}`}
-                        >
-                          <span>{platformInfo.name}</span>
-                          <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                        </a>
-                      )}
-                    </div>
-                    
-                    {/* Gemini AI Confidence Indicator */}
-                    <div className="flex items-center justify-center xs:justify-start sm:justify-end space-x-2 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 rounded-lg sm:bg-transparent sm:dark:bg-transparent sm:px-0 sm:py-0">
-                      <div className={`w-3 h-3 rounded-full ${
-                        geminiRec.aiConfidence.overall >= 80 ? 'bg-green-500' :
-                        geminiRec.aiConfidence.overall >= 60 ? 'bg-yellow-500' :
-                        'bg-orange-500'
-                      }`}></div>
-                      <span className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 sm:text-gray-500 sm:dark:text-gray-400 font-medium sm:font-normal">Gemini Recommended</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : showGeminiRecommendations && geminiRecommendations.length === 0 ? (
-          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4 text-center">
-            <Sparkles className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
-            <p className="text-emerald-700 dark:text-emerald-300 text-sm">
-              Gemini AI is analyzing your learning patterns...
-            </p>
-          </div>
-        ) : null}
+        {/* Smart AI Recommendations (Legacy) */}
 
         {/* Smart AI Recommendations */}
         {showAiRecommendations && smartRecommendations.length > 0 ? (
@@ -1948,13 +1623,15 @@ export default function SupabaseProgressiveRecommendations() {
                     {/* Problem Header with AI Confidence */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h4 className={`font-medium text-sm sm:text-base ${
-                          isSolved 
-                            ? 'text-green-800 dark:text-green-200' 
-                            : 'text-gray-900 dark:text-gray-100'
-                        }`}>
-                          {isSolved && '✅ '}{problem.title}
-                        </h4>
+                        <Link to={`/solve/${problem.id}`} className="hover:opacity-80 transition-opacity">
+                          <h4 className={`font-medium text-sm sm:text-base hover:underline ${
+                            isSolved 
+                              ? 'text-green-800 dark:text-green-200' 
+                              : 'text-gray-900 dark:text-gray-100'
+                          }`}>
+                            {isSolved && '✅ '}{problem.title}
+                          </h4>
+                        </Link>
                         <div className="flex items-center space-x-2 mt-1">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(problem.difficulty)}`}>
                             {problem.difficulty}
@@ -2034,6 +1711,13 @@ export default function SupabaseProgressiveRecommendations() {
                             <span>Mark Solved</span>
                           </button>
                         )}
+                        <Link
+                          to={`/solve/${problem.id}`}
+                          className="flex items-center space-x-1 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors text-xs font-medium"
+                        >
+                          <Terminal className="h-3 w-3 flex-shrink-0" />
+                          <span>Solve</span>
+                        </Link>
                         {problem.link && (
                           <a
                             href={problem.link}
@@ -2082,13 +1766,15 @@ export default function SupabaseProgressiveRecommendations() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                   <div className="flex-1">
                     <div className="flex items-start justify-between">
-                      <h4 className={`font-medium text-sm sm:text-base ${
-                        isSolved 
-                          ? 'text-green-800 dark:text-green-200' 
-                          : 'text-gray-900 dark:text-gray-100'
-                      }`}>
-                        {isSolved && '✅ '}{problem.title}
-                      </h4>
+                      <Link to={`/solve/${problem.id}`} className="hover:opacity-80 transition-opacity">
+                        <h4 className={`font-medium text-sm sm:text-base hover:underline ${
+                          isSolved 
+                            ? 'text-green-800 dark:text-green-200' 
+                            : 'text-gray-900 dark:text-gray-100'
+                        }`}>
+                          {isSolved && '✅ '}{problem.title}
+                        </h4>
+                      </Link>
                     </div>
                     
                     <div className="flex flex-col xs:flex-row xs:items-center xs:space-x-3 space-y-1 xs:space-y-0 text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-2">
@@ -2119,6 +1805,14 @@ export default function SupabaseProgressiveRecommendations() {
                         <span>Mark Solved</span>
                       </button>
                     )}
+                    <Link
+                      to={`/solve/${problem.id}`}
+                      className="flex items-center space-x-1 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors text-xs sm:text-sm font-medium"
+                    >
+                      <Terminal className="h-3 w-3 flex-shrink-0" />
+                      <span className="hidden xs:inline">Solve Here</span>
+                      <span className="xs:hidden">Solve</span>
+                    </Link>
                     {problem.link && (
                       <a
                         href={problem.link}
@@ -2126,7 +1820,7 @@ export default function SupabaseProgressiveRecommendations() {
                         rel="noopener noreferrer"
                         className={`flex items-center space-x-1 px-3 py-1 text-white rounded-md transition-colors text-xs sm:text-sm ${platformInfo.color}`}
                       >
-                        <span>{platformInfo.name}</span>
+                        <span className="hidden xs:inline">{platformInfo.name}</span>
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
