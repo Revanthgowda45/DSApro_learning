@@ -5,12 +5,13 @@
   
   <h3>An AI Coding Mentor That Remembers Your Mistakes & Learns With You</h3>
   <br />
-  [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Visit_App-blue?style=for-the-badge)](https://dsapro.netlify.app/)
-  [![Hindsight](https://img.shields.io/badge/Hindsight-Agent_Memory-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTBIMTIgVjJaIi8+PC9zdmc+)](https://github.com/vectorize-io/hindsight)
-  [![React](https://img.shields.io/badge/React-18.3.1-61DAFB?style=flat&logo=react)](https://reactjs.org/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-5.5.3-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
-  [![Groq AI](https://img.shields.io/badge/Groq-AI_Engine-orange?style=flat)](https://groq.com/)
-  [![Supabase](https://img.shields.io/badge/Supabase-2.52.1-3ECF8E?style=flat&logo=supabase)](https://supabase.com/)
+  
+  <a href="https://dsapro.netlify.app/"><img src="https://img.shields.io/badge/🌐_Live_Demo-Visit_App-blue?style=for-the-badge" alt="Live Demo"></a>
+  <a href="https://github.com/vectorize-io/hindsight"><img src="https://img.shields.io/badge/Hindsight-Agent_Memory-purple?style=for-the-badge" alt="Hindsight"></a>
+  <a href="https://reactjs.org/"><img src="https://img.shields.io/badge/React-18.3.1-61DAFB?style=flat&logo=react" alt="React"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.5.3-3178C6?style=flat&logo=typescript" alt="TypeScript"></a>
+  <a href="https://groq.com/"><img src="https://img.shields.io/badge/Groq-AI_Engine-orange?style=flat" alt="Groq AI"></a>
+  <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-2.52.1-3ECF8E?style=flat&logo=supabase" alt="Supabase"></a>
 </div>
 
 ---
